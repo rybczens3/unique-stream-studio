@@ -67,7 +67,7 @@ private:
 	std::vector<std::string> disabledServices_ = {};
 	std::vector<std::string> disabledEncoders_ = {};
 	PortalSession portalSession_ = {};
-	std::string portalBaseUrl_ = "http://localhost:8080/portal/api";
+	std::string portalBaseUrl_ = "https://portal.unique-stream-studio.com/portal/api";
 	std::filesystem::path getConfigFilePath_();
 	std::filesystem::path getPortalConfigFilePath_();
 	void loadModules_();
