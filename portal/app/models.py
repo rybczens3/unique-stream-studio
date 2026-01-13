@@ -29,8 +29,29 @@ class AccountInfo(BaseModel):
     role: str
 
 
+class UserInfo(BaseModel):
+    username: str
+    role: str
+
+
+class UserCreateRequest(BaseModel):
+    username: str
+    password: str
+    role: str
+
+
+class UserUpdateRequest(BaseModel):
+    password: str | None = None
+    role: str | None = None
+
+
 class PluginCreateRequest(BaseModel):
     id: str
+    name: str
+    compatibility: str
+
+
+class PluginUpdateRequest(BaseModel):
     name: str
     compatibility: str
 

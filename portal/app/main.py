@@ -11,17 +11,24 @@ from .models import (
     LoginRequest,
     PluginCreateRequest,
     PluginMetadata,
+    PluginUpdateRequest,
     PluginVersionRequest,
     TokenResponse,
+    UserCreateRequest,
+    UserInfo,
+    UserUpdateRequest,
 )
 from .storage import (
     PLUGINS,
+    PERMISSIONS,
+    ROLES,
     TOKENS,
     USERS,
     PluginRecord,
     PluginVersion,
     compute_sha256,
     package_bytes,
+    seed_users,
     seed_plugins,
     signature_for,
 )
@@ -31,6 +38,7 @@ app = FastAPI(title="Plugin Portal API")
 BASE_PATH = "/portal/api"
 
 seed_plugins("http://localhost:8080" + BASE_PATH)
+seed_users()
 
 
 def get_session(authorization: Optional[str]) -> Optional[dict]:
@@ -49,9 +57,11 @@ def require_session(authorization: Optional[str]) -> dict:
     return session
 
 
-def require_admin(session: dict) -> None:
-    if session.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
+def require_permission(session: dict, permission: str) -> None:
+    role = session.get("role")
+    allowed = PERMISSIONS.get(role, set())
+    if permission not in allowed:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 @app.post(BASE_PATH + "/auth/login", response_model=TokenResponse)
@@ -78,6 +88,27 @@ def login(payload: LoginRequest) -> TokenResponse:
 def account_me(authorization: Optional[str] = Header(None)) -> AccountInfo:
     session = require_session(authorization)
     return AccountInfo(username=session["username"], role=session["role"])
+
+
+@app.get(BASE_PATH + "/admin/plugins", response_model=List[PluginMetadata])
+def list_plugins_admin(authorization: Optional[str] = Header(None)) -> List[PluginMetadata]:
+    session = require_session(authorization)
+    require_permission(session, "plugins:read")
+    results: List[PluginMetadata] = []
+    for plugin in PLUGINS.values():
+        latest = plugin.versions[-1]
+        results.append(
+            PluginMetadata(
+                id=plugin.id,
+                name=plugin.name,
+                version=latest.version,
+                compatibility=plugin.compatibility,
+                package_url=latest.package_url,
+                sha256=latest.sha256,
+                signature=latest.signature,
+            )
+        )
+    return results
 
 
 @app.get(BASE_PATH + "/plugins", response_model=List[PluginMetadata])
@@ -157,7 +188,7 @@ def create_plugin(
     authorization: Optional[str] = Header(None),
 ) -> PluginMetadata:
     session = require_session(authorization)
-    require_admin(session)
+    require_permission(session, "plugins:write")
 
     if payload.id in PLUGINS:
         raise HTTPException(status_code=409, detail="Plugin already exists")
@@ -195,7 +226,7 @@ def add_plugin_version(
     authorization: Optional[str] = Header(None),
 ) -> PluginMetadata:
     session = require_session(authorization)
-    require_admin(session)
+    require_permission(session, "plugins:write")
 
     plugin = PLUGINS.get(plugin_id)
     if not plugin:
@@ -220,3 +251,85 @@ def add_plugin_version(
         signature=payload.signature,
     )
 
+
+@app.put(BASE_PATH + "/admin/plugins/{plugin_id}", response_model=PluginMetadata)
+def update_plugin(
+    plugin_id: str,
+    payload: PluginUpdateRequest,
+    authorization: Optional[str] = Header(None),
+) -> PluginMetadata:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    plugin.name = payload.name
+    plugin.compatibility = payload.compatibility
+    latest = plugin.versions[-1]
+    return PluginMetadata(
+        id=plugin.id,
+        name=plugin.name,
+        version=latest.version,
+        compatibility=plugin.compatibility,
+        package_url=latest.package_url,
+        sha256=latest.sha256,
+        signature=latest.signature,
+    )
+
+
+@app.delete(BASE_PATH + "/admin/plugins/{plugin_id}", status_code=204)
+def delete_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> None:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+
+    if plugin_id not in PLUGINS:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    del PLUGINS[plugin_id]
+
+
+@app.get(BASE_PATH + "/admin/users", response_model=List[UserInfo])
+def list_users(authorization: Optional[str] = Header(None)) -> List[UserInfo]:
+    session = require_session(authorization)
+    require_permission(session, "users:manage")
+    return [UserInfo(username=username, role=user["role"]) for username, user in USERS.items()]
+
+
+@app.post(BASE_PATH + "/admin/users", response_model=UserInfo)
+def create_user(payload: UserCreateRequest, authorization: Optional[str] = Header(None)) -> UserInfo:
+    session = require_session(authorization)
+    require_permission(session, "users:manage")
+    if payload.role not in ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    if payload.username in USERS:
+        raise HTTPException(status_code=409, detail="User already exists")
+    USERS[payload.username] = {"password": payload.password, "role": payload.role}
+    return UserInfo(username=payload.username, role=payload.role)
+
+
+@app.patch(BASE_PATH + "/admin/users/{username}", response_model=UserInfo)
+def update_user(
+    username: str, payload: UserUpdateRequest, authorization: Optional[str] = Header(None)
+) -> UserInfo:
+    session = require_session(authorization)
+    require_permission(session, "users:manage")
+    user = USERS.get(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if payload.role:
+        if payload.role not in ROLES:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        user["role"] = payload.role
+    if payload.password:
+        user["password"] = payload.password
+    return UserInfo(username=username, role=user["role"])
+
+
+@app.delete(BASE_PATH + "/admin/users/{username}", status_code=204)
+def delete_user(username: str, authorization: Optional[str] = Header(None)) -> None:
+    session = require_session(authorization)
+    require_permission(session, "users:manage")
+    if username not in USERS:
+        raise HTTPException(status_code=404, detail="User not found")
+    del USERS[username]
