@@ -2,6 +2,8 @@
 
 #include <QWizardPage>
 
+#include <vector>
+
 class Auth;
 class Ui_AutoConfigStreamPage;
 
@@ -20,9 +22,19 @@ class AutoConfigStreamPage : public QWizardPage {
 	std::unique_ptr<Ui_AutoConfigStreamPage> ui;
 	QString lastService;
 	bool ready = false;
+	struct StreamTargetEntry {
+		QString platform;
+		QString server;
+		QString key;
+	};
+	std::vector<StreamTargetEntry> streamTargets;
 
 	void LoadServices(bool showAll);
 	inline bool IsCustomService() const;
+	void InitializeMultiServiceTargetsUI();
+	void AddStreamTargetRow(const StreamTargetEntry &entry);
+	std::vector<StreamTargetEntry> CollectStreamTargets() const;
+	void UpdateTargetButtons();
 
 public:
 	AutoConfigStreamPage(QWidget *parent = nullptr);
@@ -40,6 +52,8 @@ public slots:
 	void on_connectAccount_clicked();
 	void on_disconnectAccount_clicked();
 	void on_useStreamKey_clicked();
+	void on_addTargetButton_clicked();
+	void on_removeTargetButton_clicked();
 	void on_preferHardware_clicked();
 	void ServiceChanged();
 	void UpdateKeyLink();

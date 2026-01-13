@@ -647,6 +647,7 @@ std::shared_future<void> SimpleOutput::SetupStreaming(obs_service_t *service, Se
 		}
 		obs_output_set_audio_encoder(streamOutput, audioStreaming, 0);
 		obs_output_set_service(streamOutput, service);
+		ConfigureExtraStreamOutputs(this, type);
 		return true;
 	};
 
@@ -678,6 +679,29 @@ void SimpleOutput::SetupVodTrack(obs_service_t *service)
 		obs_output_set_audio_encoder(streamOutput, audioArchive, 1);
 	else
 		clear_archive_encoder(streamOutput, SIMPLE_ARCHIVE_NAME);
+}
+
+static void ConfigureExtraStreamOutputs(SimpleOutput *output_handler, const std::string &type)
+{
+	output_handler->extraStreamOutputs.clear();
+
+	const auto &services = output_handler->main->GetServices();
+	if (services.size() <= 1)
+		return;
+
+	for (size_t i = 1; i < services.size(); ++i) {
+		std::string name = "simple_stream_extra_" + std::to_string(i);
+		OBSOutputAutoRelease output = obs_output_create(type.c_str(), name.c_str(), nullptr, nullptr);
+		if (!output) {
+			blog(LOG_WARNING, "Creation of stream output type '%s' failed for target %zu!", type.c_str(),
+			     i + 1);
+			continue;
+		}
+
+		obs_output_set_video_encoder(output, output_handler->videoStreaming);
+		obs_output_set_audio_encoder(output, output_handler->audioStreaming, 0);
+		output_handler->extraStreamOutputs.emplace_back(std::move(output));
+	}
 }
 
 bool SimpleOutput::StartStreaming(obs_service_t *service)
@@ -713,19 +737,53 @@ bool SimpleOutput::StartStreaming(obs_service_t *service)
 
 	auto streamOutput = StreamingOutput(); // shadowing is sort of bad, but also convenient
 
-	obs_output_update(streamOutput, settings);
-
 	if (!reconnect)
 		maxRetries = 0;
 
-	obs_output_set_delay(streamOutput, useDelay ? delaySec : 0, preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
+	auto configure_output = [&](obs_output_t *output) {
+		obs_output_update(output, settings);
+		obs_output_set_delay(output, useDelay ? delaySec : 0,
+				     preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
+		obs_output_set_reconnect_settings(output, maxRetries, retryDelay);
+	};
 
-	obs_output_set_reconnect_settings(streamOutput, maxRetries, retryDelay);
+	configure_output(streamOutput);
 
 	if (!multitrackVideo || !multitrackVideoActive)
 		SetupVodTrack(service);
 
 	if (obs_output_start(streamOutput)) {
+		bool all_extra_started = true;
+		const auto &services = main->GetServices();
+		for (size_t i = 0; i < extraStreamOutputs.size(); ++i) {
+			if (i + 1 >= services.size())
+				break;
+
+			obs_output_t *extra_output = extraStreamOutputs[i];
+			obs_service_t *extra_service = services[i + 1];
+			obs_output_set_service(extra_output, extra_service);
+			if (!multitrackVideo || !multitrackVideoActive)
+				SetupVodTrack(extra_service);
+			configure_output(extra_output);
+
+			if (!obs_output_start(extra_output)) {
+				all_extra_started = false;
+				const char *error = obs_output_get_last_error(extra_output);
+				if (error && *error)
+					lastError = error;
+				obs_output_stop(streamOutput);
+				for (auto &started_output : extraStreamOutputs)
+					obs_output_stop(started_output);
+				break;
+			}
+		}
+
+		if (!all_extra_started) {
+			if (multitrackVideo && multitrackVideoActive)
+				multitrackVideoActive = false;
+			return false;
+		}
+
 		if (multitrackVideo && multitrackVideoActive)
 			multitrackVideo->StartedStreaming();
 		return true;
@@ -893,12 +951,19 @@ bool SimpleOutput::StartReplayBuffer()
 void SimpleOutput::StopStreaming(bool force)
 {
 	auto output = StreamingOutput();
-	if (force && output)
+	if (force && output) {
 		obs_output_force_stop(output);
-	else if (multitrackVideo && multitrackVideoActive)
+		for (auto &extra : extraStreamOutputs)
+			obs_output_force_stop(extra);
+	} else if (multitrackVideo && multitrackVideoActive) {
 		multitrackVideo->StopStreaming();
-	else
+		for (auto &extra : extraStreamOutputs)
+			obs_output_stop(extra);
+	} else {
 		obs_output_stop(output);
+		for (auto &extra : extraStreamOutputs)
+			obs_output_stop(extra);
+	}
 }
 
 void SimpleOutput::StopRecording(bool force)
@@ -919,7 +984,13 @@ void SimpleOutput::StopReplayBuffer(bool force)
 
 bool SimpleOutput::StreamingActive() const
 {
-	return obs_output_active(StreamingOutput());
+	if (obs_output_active(StreamingOutput()))
+		return true;
+	for (const auto &extra : extraStreamOutputs) {
+		if (obs_output_active(extra))
+			return true;
+	}
+	return false;
 }
 
 bool SimpleOutput::RecordingActive() const

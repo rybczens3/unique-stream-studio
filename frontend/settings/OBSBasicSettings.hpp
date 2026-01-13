@@ -211,6 +211,12 @@ private:
 	QString lastService;
 	QString protocol;
 	QString lastCustomServer;
+	struct StreamTargetEntry {
+		QString platform;
+		QString server;
+		QString key;
+	};
+	std::vector<StreamTargetEntry> streamTargets;
 	int prevLangIndex;
 	bool prevBrowserAccel;
 
@@ -222,6 +228,11 @@ private:
 	void UpdateServiceRecommendations();
 	void UpdateMoreInfoLink();
 	void UpdateAdvNetworkGroup();
+	void InitializeMultiServiceTargetsUI();
+	void LoadStreamTargetsFromServices();
+	void AddStreamTargetRow(const StreamTargetEntry &entry);
+	std::vector<StreamTargetEntry> CollectStreamTargets() const;
+	void UpdateTargetButtons();
 
 	/* Appearance */
 	void InitAppearancePage();
@@ -242,6 +253,8 @@ private slots:
 	void on_useStreamKey_clicked();
 	void on_useAuth_toggled();
 	void on_server_currentIndexChanged(int index);
+	void on_addTargetButton_clicked();
+	void on_removeTargetButton_clicked();
 
 	void on_hotkeyFilterReset_clicked();
 	void on_hotkeyFilterSearch_textChanged(const QString text);

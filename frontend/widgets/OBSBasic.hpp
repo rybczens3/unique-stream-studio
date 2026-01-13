@@ -1353,12 +1353,15 @@ private slots:
 	 */
 private:
 	OBSService service;
+	std::vector<OBSService> streamServices;
 
 	bool InitService();
 
 public:
 	obs_service_t *GetService();
+	const std::vector<OBSService> &GetServices() const;
 	void SetService(obs_service_t *service);
+	void SetServices(const std::vector<OBSService> &services);
 
 	void SaveService();
 	bool LoadService();
