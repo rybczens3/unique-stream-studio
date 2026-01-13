@@ -10,6 +10,7 @@
 !/frontend
 !/libobs*
 !/plugins
+!/portal
 !/shared
 !/test
 !.cirrus.xml

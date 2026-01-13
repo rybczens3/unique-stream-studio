@@ -23,6 +23,14 @@
 #include <widgets/OBSBasic.hpp>
 
 #include <QMessageBox>
+#include <QCryptographicHash>
+#include <QDateTime>
+#include <QEventLoop>
+#include <QFile>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrl>
 
 #include <nlohmann/json.hpp>
 
@@ -63,10 +71,12 @@ void addModuleToPluginManagerImpl(void *param, obs_module_t *newModule)
 
 constexpr std::string_view OBSPluginManagerPath = "obs-studio/plugin_manager";
 constexpr std::string_view OBSPluginManagerModulesFile = "modules.json";
+constexpr std::string_view OBSPluginManagerPortalFile = "portal.json";
 
 void PluginManager::preLoad()
 {
 	loadModules_();
+	loadPortalSession_();
 	disableModules_();
 }
 
@@ -86,6 +96,14 @@ std::filesystem::path PluginManager::getConfigFilePath_()
 	std::filesystem::path path = App()->userPluginManagerSettingsLocation /
 				     std::filesystem::u8path(OBSPluginManagerPath) /
 				     std::filesystem::u8path(OBSPluginManagerModulesFile);
+	return path;
+}
+
+std::filesystem::path PluginManager::getPortalConfigFilePath_()
+{
+	std::filesystem::path path = App()->userPluginManagerSettingsLocation /
+				     std::filesystem::u8path(OBSPluginManagerPath) /
+				     std::filesystem::u8path(OBSPluginManagerPortalFile);
 	return path;
 }
 
@@ -128,6 +146,29 @@ void PluginManager::loadModules_()
 			modules_.push_back(obsModule);
 		}
 	}
+}
+
+void PluginManager::loadPortalSession_()
+{
+	auto sessionFile = getPortalConfigFilePath_();
+	if (!std::filesystem::exists(sessionFile)) {
+		return;
+	}
+
+	std::ifstream jsonFile(sessionFile);
+	nlohmann::json data;
+	try {
+		data = nlohmann::json::parse(jsonFile);
+	} catch (const nlohmann::json::parse_error &error) {
+		blog(LOG_ERROR, "Error loading portal config file: %s", error.what());
+		return;
+	}
+
+	portalSession_.username = data.value("username", "");
+	portalSession_.role = data.value("role", "");
+	portalSession_.accessToken = data.value("access_token", "");
+	portalSession_.refreshToken = data.value("refresh_token", "");
+	portalBaseUrl_ = data.value("base_url", portalBaseUrl_);
 }
 
 void PluginManager::linkUnloadedModules_()
@@ -174,6 +215,149 @@ void PluginManager::saveModules_()
 		data.push_back(modData);
 	}
 	outFile << std::setw(4) << data << std::endl;
+}
+
+void PluginManager::savePortalSession_()
+{
+	auto sessionFile = getPortalConfigFilePath_();
+	std::filesystem::create_directories(sessionFile.parent_path());
+	std::ofstream outFile(sessionFile);
+	nlohmann::json data;
+	data["username"] = portalSession_.username;
+	data["role"] = portalSession_.role;
+	data["access_token"] = portalSession_.accessToken;
+	data["refresh_token"] = portalSession_.refreshToken;
+	data["base_url"] = portalBaseUrl_;
+	outFile << std::setw(4) << data << std::endl;
+}
+
+bool PluginManager::verifyPackageHash_(const std::filesystem::path &packagePath, const std::string &expectedSha256,
+				       std::string &errorMessage) const
+{
+	if (expectedSha256.empty()) {
+		errorMessage = "Missing expected SHA256 hash for package.";
+		return false;
+	}
+
+	QFile file(QString::fromStdString(packagePath.u8string()));
+	if (!file.open(QIODevice::ReadOnly)) {
+		errorMessage = "Unable to read downloaded package for hash verification.";
+		return false;
+	}
+
+	QCryptographicHash hash(QCryptographicHash::Sha256);
+	if (!hash.addData(&file)) {
+		errorMessage = "Unable to compute package hash.";
+		return false;
+	}
+
+	const QString computed = hash.result().toHex();
+	if (computed.compare(QString::fromStdString(expectedSha256), Qt::CaseInsensitive) != 0) {
+		errorMessage = "Package hash mismatch.";
+		return false;
+	}
+
+	return true;
+}
+
+bool PluginManager::verifyPackageSignature_(const std::string &sha256, const std::string &signature,
+					    std::string &errorMessage) const
+{
+	if (signature.empty()) {
+		errorMessage = "Missing package signature.";
+		return false;
+	}
+
+	const std::string expectedSignature = "sha256:" + sha256;
+	if (signature != expectedSignature) {
+		errorMessage = "Package signature verification failed.";
+		return false;
+	}
+
+	return true;
+}
+
+bool PluginManager::downloadAndInstallPackage(const PluginPackageMetadata &metadata, const PortalSession &session,
+					      std::string &errorMessage)
+{
+	if (metadata.packageUrl.empty()) {
+		errorMessage = "Missing package URL.";
+		return false;
+	}
+
+	QNetworkAccessManager network;
+	QNetworkRequest request(QUrl(QString::fromStdString(metadata.packageUrl)));
+	if (!session.accessToken.empty()) {
+		const QByteArray token = "Bearer " + QByteArray::fromStdString(session.accessToken);
+		request.setRawHeader("Authorization", token);
+	}
+
+	QEventLoop loop;
+	QNetworkReply *reply = network.get(request);
+	QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+	loop.exec();
+
+	if (reply->error() != QNetworkReply::NoError) {
+		errorMessage = "Failed to download package.";
+		reply->deleteLater();
+		return false;
+	}
+
+	QByteArray packageData = reply->readAll();
+	reply->deleteLater();
+
+	std::filesystem::path tempDir = std::filesystem::temp_directory_path() /
+					std::filesystem::path("obs-plugin-packages");
+	std::filesystem::create_directories(tempDir);
+
+	std::string tempFileName = metadata.id + "-" + metadata.version + ".pkg";
+	std::filesystem::path tempPath = tempDir / tempFileName;
+
+	QFile tempFile(QString::fromStdString(tempPath.u8string()));
+	if (!tempFile.open(QIODevice::WriteOnly)) {
+		errorMessage = "Unable to write downloaded package.";
+		return false;
+	}
+	tempFile.write(packageData);
+	tempFile.close();
+
+	if (!verifyPackageHash_(tempPath, metadata.sha256, errorMessage)) {
+		return false;
+	}
+
+	if (!verifyPackageSignature_(metadata.sha256, metadata.signature, errorMessage)) {
+		return false;
+	}
+
+	std::filesystem::path pluginsRoot = App()->userPluginManagerSettingsLocation /
+					    std::filesystem::u8path("obs-studio/plugins");
+	std::filesystem::path pluginDir = pluginsRoot / std::filesystem::u8path(metadata.id);
+	std::filesystem::path installPath = pluginDir / std::filesystem::u8path(tempFileName);
+
+	std::filesystem::path backupDir;
+	if (std::filesystem::exists(pluginDir)) {
+		std::string timestamp = QDateTime::currentDateTimeUtc().toString("yyyyMMddhhmmss").toStdString();
+		backupDir = pluginDir;
+		backupDir += ".backup-" + timestamp;
+		std::filesystem::rename(pluginDir, backupDir);
+	}
+
+	try {
+		std::filesystem::create_directories(pluginDir);
+		std::filesystem::copy_file(tempPath, installPath, std::filesystem::copy_options::overwrite_existing);
+	} catch (const std::filesystem::filesystem_error &error) {
+		errorMessage = std::string("Failed to install package: ") + error.what();
+		if (!backupDir.empty() && std::filesystem::exists(backupDir)) {
+			std::filesystem::rename(backupDir, pluginDir);
+		}
+		return false;
+	}
+
+	if (!backupDir.empty() && std::filesystem::exists(backupDir)) {
+		std::filesystem::remove_all(backupDir);
+	}
+
+	return true;
 }
 
 void PluginManager::addModuleTypes_()
@@ -281,11 +465,13 @@ void PluginManager::disableModules_()
 void PluginManager::open()
 {
 	auto main = OBSBasic::Get();
-	PluginManagerWindow pluginManagerWindow(modules_, main);
+	PluginManagerWindow pluginManagerWindow(this, modules_, portalSession_, portalBaseUrl_, main);
 	auto result = pluginManagerWindow.exec();
 	if (result == QDialog::Accepted) {
 		modules_ = pluginManagerWindow.result();
+		portalSession_ = pluginManagerWindow.portalSessionResult();
 		saveModules_();
+		savePortalSession_();
 
 		bool changed = false;
 

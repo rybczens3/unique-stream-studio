@@ -169,23 +169,7 @@
              <number>0</number>
             </property>
             <item>
-             <widget class="QLabel" name="label">
-              <property name="frameShape">
-               <enum>QFrame::NoFrame</enum>
-              </property>
-              <property name="lineWidth">
-               <number>0</number>
-              </property>
-              <property name="text">
-               <string>PluginManager.Section.Manage.Title</string>
-              </property>
-              <property name="class" stdset="0">
-               <string>text-title</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QScrollArea" name="modulesListContainer">
+             <widget class="QFrame" name="accountFrame">
               <property name="frameShape">
                <enum>QFrame::NoFrame</enum>
               </property>
@@ -195,37 +179,77 @@
               <property name="lineWidth">
                <number>0</number>
               </property>
-              <property name="horizontalScrollBarPolicy">
-               <enum>Qt::ScrollBarAlwaysOff</enum>
-              </property>
-              <property name="sizeAdjustPolicy">
-               <enum>QAbstractScrollArea::AdjustToContents</enum>
-              </property>
-              <property name="widgetResizable">
-               <bool>false</bool>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-              </property>
-              <property name="class" stdset="0">
-               <string/>
-              </property>
-              <widget class="QWidget" name="modulesListContents">
-               <property name="geometry">
-                <rect>
-                 <x>0</x>
-                 <y>0</y>
-                 <width>689</width>
-                 <height>50</height>
-                </rect>
+              <layout class="QHBoxLayout" name="accountLayout">
+               <property name="leftMargin">
+                <number>12</number>
                </property>
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
+               <property name="topMargin">
+                <number>12</number>
                </property>
-               <layout class="QVBoxLayout" name="verticalLayout_5">
+               <property name="rightMargin">
+                <number>12</number>
+               </property>
+               <property name="bottomMargin">
+                <number>12</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="accountStatusLabel">
+                 <property name="text">
+                  <string>PluginManager.Account.Guest</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>text-muted</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLineEdit" name="accountUsernameInput">
+                 <property name="placeholderText">
+                  <string>PluginManager.Account.Username</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLineEdit" name="accountPasswordInput">
+                 <property name="echoMode">
+                  <enum>QLineEdit::Password</enum>
+                 </property>
+                 <property name="placeholderText">
+                  <string>PluginManager.Account.Password</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="accountLoginButton">
+                 <property name="text">
+                  <string>PluginManager.Account.Login</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="accountLogoutButton">
+                 <property name="text">
+                  <string>PluginManager.Account.Logout</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="accountRoleLabel">
+                 <property name="text">
+                  <string>PluginManager.Account.RoleGuest</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QStackedWidget" name="sectionStack">
+              <widget class="QWidget" name="managePage">
+               <layout class="QVBoxLayout" name="manageLayout">
                 <property name="spacing">
                  <number>0</number>
                 </property>
@@ -242,13 +266,23 @@
                  <number>0</number>
                 </property>
                 <item>
-                 <widget class="QFrame" name="modulesList">
-                  <property name="minimumSize">
-                   <size>
-                    <width>0</width>
-                    <height>20</height>
-                   </size>
+                 <widget class="QLabel" name="label">
+                  <property name="frameShape">
+                   <enum>QFrame::NoFrame</enum>
                   </property>
+                  <property name="lineWidth">
+                   <number>0</number>
+                  </property>
+                  <property name="text">
+                   <string>PluginManager.Section.Manage.Title</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>text-title</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QScrollArea" name="modulesListContainer">
                   <property name="frameShape">
                    <enum>QFrame::NoFrame</enum>
                   </property>
@@ -258,53 +292,293 @@
                   <property name="lineWidth">
                    <number>0</number>
                   </property>
-                  <layout class="QVBoxLayout" name="verticalLayout_6">
-                   <property name="spacing">
-                    <number>0</number>
+                  <property name="horizontalScrollBarPolicy">
+                   <enum>Qt::ScrollBarAlwaysOff</enum>
+                  </property>
+                  <property name="sizeAdjustPolicy">
+                   <enum>QAbstractScrollArea::AdjustToContents</enum>
+                  </property>
+                  <property name="widgetResizable">
+                   <bool>false</bool>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string/>
+                  </property>
+                  <widget class="QWidget" name="modulesListContents">
+                   <property name="geometry">
+                    <rect>
+                     <x>0</x>
+                     <y>0</y>
+                     <width>689</width>
+                     <height>50</height>
+                    </rect>
                    </property>
-                   <property name="leftMargin">
-                    <number>0</number>
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
                    </property>
-                   <property name="topMargin">
-                    <number>0</number>
-                   </property>
-                   <property name="rightMargin">
-                    <number>0</number>
-                   </property>
-                   <property name="bottomMargin">
-                    <number>0</number>
-                   </property>
-                  </layout>
+                   <layout class="QVBoxLayout" name="verticalLayout_5">
+                    <property name="spacing">
+                     <number>0</number>
+                    </property>
+                    <property name="leftMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="rightMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="bottomMargin">
+                     <number>0</number>
+                    </property>
+                    <item>
+                     <widget class="QFrame" name="modulesList">
+                      <property name="minimumSize">
+                       <size>
+                        <width>0</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                      <property name="frameShape">
+                       <enum>QFrame::NoFrame</enum>
+                      </property>
+                      <property name="frameShadow">
+                       <enum>QFrame::Plain</enum>
+                      </property>
+                      <property name="lineWidth">
+                       <number>0</number>
+                      </property>
+                      <layout class="QVBoxLayout" name="verticalLayout_6">
+                       <property name="spacing">
+                        <number>0</number>
+                       </property>
+                       <property name="leftMargin">
+                        <number>0</number>
+                       </property>
+                       <property name="topMargin">
+                        <number>0</number>
+                       </property>
+                       <property name="rightMargin">
+                        <number>0</number>
+                       </property>
+                       <property name="bottomMargin">
+                        <number>0</number>
+                       </property>
+                      </layout>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="verticalSpacer">
+                      <property name="orientation">
+                       <enum>Qt::Vertical</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>10</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </widget>
                  </widget>
                 </item>
                 <item>
-                 <spacer name="verticalSpacer">
-                  <property name="orientation">
-                   <enum>Qt::Vertical</enum>
+                 <widget class="QLabel" name="manageRestartLabel">
+                  <property name="text">
+                   <string>PluginManager.Restart</string>
                   </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>10</width>
-                    <height>0</height>
-                   </size>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
                   </property>
-                 </spacer>
+                  <property name="class" stdset="0">
+                   <string>frame-notice</string>
+                  </property>
+                 </widget>
                 </item>
                </layout>
               </widget>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="manageRestartLabel">
-              <property name="text">
-               <string>PluginManager.Restart</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignCenter</set>
-              </property>
-              <property name="class" stdset="0">
-               <string>frame-notice</string>
-              </property>
+              <widget class="QWidget" name="discoverPage">
+               <layout class="QVBoxLayout" name="discoverLayout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QLabel" name="discoverTitleLabel">
+                  <property name="text">
+                   <string>PluginManager.Section.Discover.Title</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>text-title</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QHBoxLayout" name="discoverSearchLayout">
+                  <item>
+                   <widget class="QLineEdit" name="discoverSearchInput">
+                    <property name="placeholderText">
+                     <string>PluginManager.Discover.Search</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="discoverSearchButton">
+                    <property name="text">
+                     <string>PluginManager.Discover.SearchButton</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <widget class="QScrollArea" name="discoverListContainer">
+                  <property name="frameShape">
+                   <enum>QFrame::NoFrame</enum>
+                  </property>
+                  <property name="widgetResizable">
+                   <bool>false</bool>
+                  </property>
+                  <property name="horizontalScrollBarPolicy">
+                   <enum>Qt::ScrollBarAlwaysOff</enum>
+                  </property>
+                  <widget class="QWidget" name="discoverListContents">
+                   <property name="geometry">
+                    <rect>
+                     <x>0</x>
+                     <y>0</y>
+                     <width>689</width>
+                     <height>50</height>
+                    </rect>
+                   </property>
+                   <layout class="QVBoxLayout" name="discoverListLayout">
+                    <item>
+                     <widget class="QFrame" name="discoverList">
+                      <property name="frameShape">
+                       <enum>QFrame::NoFrame</enum>
+                      </property>
+                      <layout class="QVBoxLayout" name="discoverListInnerLayout"/>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="discoverListSpacer">
+                      <property name="orientation">
+                       <enum>Qt::Vertical</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>10</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </widget>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+              <widget class="QWidget" name="updatesPage">
+               <layout class="QVBoxLayout" name="updatesLayout">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QLabel" name="updatesTitleLabel">
+                  <property name="text">
+                   <string>PluginManager.Section.Updates.Title</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>text-title</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QHBoxLayout" name="updatesToolbar">
+                  <item>
+                   <widget class="QPushButton" name="updatesRefreshButton">
+                    <property name="text">
+                     <string>PluginManager.Updates.Refresh</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <widget class="QScrollArea" name="updatesListContainer">
+                  <property name="frameShape">
+                   <enum>QFrame::NoFrame</enum>
+                  </property>
+                  <property name="widgetResizable">
+                   <bool>false</bool>
+                  </property>
+                  <property name="horizontalScrollBarPolicy">
+                   <enum>Qt::ScrollBarAlwaysOff</enum>
+                  </property>
+                  <widget class="QWidget" name="updatesListContents">
+                   <property name="geometry">
+                    <rect>
+                     <x>0</x>
+                     <y>0</y>
+                     <width>689</width>
+                     <height>50</height>
+                    </rect>
+                   </property>
+                   <layout class="QVBoxLayout" name="updatesListLayout">
+                    <item>
+                     <widget class="QFrame" name="updatesList">
+                      <property name="frameShape">
+                       <enum>QFrame::NoFrame</enum>
+                      </property>
+                      <layout class="QVBoxLayout" name="updatesListInnerLayout"/>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="updatesListSpacer">
+                      <property name="orientation">
+                       <enum>Qt::Vertical</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>10</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </widget>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
              </widget>
             </item>
            </layout>
