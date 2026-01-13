@@ -56,17 +56,20 @@ class AccountInfo(BaseModel):
 class UserInfo(BaseModel):
     username: str
     role: str
+    active: bool
 
 
 class UserCreateRequest(BaseModel):
     username: str
     password: str
     role: str
+    active: bool = True
 
 
 class UserUpdateRequest(BaseModel):
     password: str | None = None
     role: str | None = None
+    active: bool | None = None
 
 
 class PluginCreateRequest(BaseModel):
