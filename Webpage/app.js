@@ -24,9 +24,9 @@ function setSession(user) {
   state.user = user;
   state.role = user?.role ?? null;
   if (user) {
-    sessionInfoEl.innerHTML = `Zalogowano jako <strong>${user.username}</strong> (${user.role})`;
+    sessionInfoEl.innerHTML = `Signed in as <strong>${user.username}</strong> (${user.role})`;
   } else {
-    sessionInfoEl.textContent = "Brak aktywnej sesji";
+    sessionInfoEl.textContent = "No active session";
   }
   renderNav();
 }
@@ -86,17 +86,18 @@ async function bootstrapSession() {
 
 function renderNav() {
   const links = [
-    { href: "#/plugins", label: "Lista wtyczek" },
+    { href: "#/home", label: "Home" },
+    { href: "#/plugins", label: "Plugins" },
   ];
   if (requireRole(["developer", "admin"])) {
-    links.push({ href: "#/my-plugins", label: "Moje wtyczki" });
-    links.push({ href: "#/plugins/new", label: "Dodaj wtyczkę" });
+    links.push({ href: "#/my-plugins", label: "My Plugins" });
+    links.push({ href: "#/plugins/new", label: "Submit Plugin" });
   }
   if (requireRole(["admin"])) {
-    links.push({ href: "#/admin/queue", label: "Kolejka zatwierdzeń" });
-    links.push({ href: "#/admin/users", label: "Użytkownicy" });
+    links.push({ href: "#/admin/queue", label: "Approval Queue" });
+    links.push({ href: "#/admin/users", label: "Users" });
   }
-  links.push({ href: "#/login", label: state.user ? "Sesja" : "Logowanie" });
+  links.push({ href: "#/login", label: state.user ? "Session" : "Sign In" });
 
   navEl.innerHTML = links
     .map(
@@ -109,7 +110,67 @@ function renderNav() {
 function renderLoading() {
   view.innerHTML = `
     <div class="card">
-      <p>Ładowanie danych...</p>
+      <p>Loading data...</p>
+    </div>
+  `;
+}
+
+function renderHome() {
+  view.innerHTML = `
+    <div class="hero">
+      <div class="card hero-card">
+        <span class="pill">Creator-grade plugin management</span>
+        <h2>Build, review, and ship plugins with studio-quality polish.</h2>
+        <p>Streamline Portal keeps developers, admins, and users aligned with a unified workflow inspired by modern streaming dashboards.</p>
+        <div class="hero-actions">
+          <a class="button" href="#/plugins">Explore plugins</a>
+          <a class="button secondary" href="#/login">Manage access</a>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Live operations overview</h2>
+        <p class="section-lead">Track your ecosystem in real time. Update releases, approve submissions, and support creators from a single command center.</p>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <p class="helper">Active plugins</p>
+            <h3>128</h3>
+          </div>
+          <div class="stat-card">
+            <p class="helper">Pending reviews</p>
+            <h3>6</h3>
+          </div>
+          <div class="stat-card">
+            <p class="helper">Creator teams</p>
+            <h3>42</h3>
+          </div>
+          <div class="stat-card">
+            <p class="helper">Avg. release cycle</p>
+            <h3>3.2 days</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="section-title">Everything you need to run your plugin marketplace</h2>
+      <p class="section-lead">A cohesive experience for creators and administrators, designed with the sleek, dark aesthetic of leading streaming tools.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Creator workspaces</h3>
+          <p>Manage drafts, iterate on metadata, and ship updates with confidence.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Review pipelines</h3>
+          <p>Approve submissions quickly with status tracking and release automation.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Secure sessions</h3>
+          <p>Role-based access for admins, developers, and end-users.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Download insights</h3>
+          <p>Keep users informed with compatibility, version history, and package integrity.</p>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -118,26 +179,26 @@ function renderLogin() {
   view.innerHTML = `
     <div class="grid two">
       <div class="card">
-        <h2>Logowanie</h2>
+        <h2>Sign in</h2>
         <form class="form" id="loginForm">
           <div>
-            <label for="username">Nazwa użytkownika</label>
-            <input id="username" name="username" placeholder="np. admin" required />
+            <label for="username">Username</label>
+            <input id="username" name="username" placeholder="e.g. admin" required />
           </div>
           <div>
-            <label for="password">Hasło</label>
+            <label for="password">Password</label>
             <input id="password" name="password" type="password" required />
           </div>
-          <button class="button" type="submit">Zaloguj</button>
+          <button class="button" type="submit">Sign in</button>
         </form>
       </div>
       <div class="card">
-        <h2>Sesja</h2>
-        <p>${state.user ? `Aktywny użytkownik: <strong>${state.user.username}</strong>` : "Brak aktywnej sesji."}</p>
+        <h2>Session</h2>
+        <p>${state.user ? `Active user: <strong>${state.user.username}</strong>` : "No active session."}</p>
         <div class="actions">
-          <button class="button secondary" id="logoutBtn" ${state.user ? "" : "disabled"}>Wyloguj</button>
+          <button class="button secondary" id="logoutBtn" ${state.user ? "" : "disabled"}>Sign out</button>
         </div>
-        <p class="helper">Użyj kont seeded w API: admin/admin, developer/dev, user/user.</p>
+        <p class="helper">Use seeded API accounts: admin/admin, developer/dev, user/user.</p>
       </div>
     </div>
   `;
@@ -149,7 +210,7 @@ function renderLogin() {
     event.preventDefault();
     const formData = new FormData(form);
     const payload = Object.fromEntries(formData.entries());
-    setStatus("Logowanie...", "info");
+    setStatus("Signing in...", "info");
     try {
       const result = await apiFetch("/auth/login", {
         method: "POST",
@@ -158,10 +219,10 @@ function renderLogin() {
       state.token = result.access_token;
       localStorage.setItem("portalToken", state.token);
       setSession({ username: result.username, role: result.role });
-      setStatus("Zalogowano pomyślnie.", "info");
+      setStatus("Signed in successfully.", "success");
       location.hash = "#/plugins";
     } catch (error) {
-      setStatus(`Błąd logowania: ${error.message}`, "warning");
+      setStatus(`Sign-in failed: ${error.message}`, "warning");
     }
   });
 
@@ -169,18 +230,18 @@ function renderLogin() {
     state.token = null;
     localStorage.removeItem("portalToken");
     setSession(null);
-    setStatus("Wylogowano.", "info");
+    setStatus("Signed out.", "info");
   });
 }
 
 function renderPluginList() {
   view.innerHTML = `
-    <div class="card">
+      <div class="card">
       <div class="inline" style="justify-content: space-between;">
-        <h2>Lista opublikowanych wtyczek</h2>
+        <h2>Published plugins</h2>
         <form class="search" id="pluginSearch">
-          <input name="query" placeholder="Szukaj po nazwie lub ID" />
-          <button class="button secondary" type="submit">Szukaj</button>
+          <input name="query" placeholder="Search by name or ID" />
+          <button class="button secondary" type="submit">Search</button>
         </form>
       </div>
       <div id="pluginList" class="grid" style="margin-top: 18px;"></div>
@@ -191,11 +252,11 @@ function renderPluginList() {
   const searchForm = document.getElementById("pluginSearch");
 
   async function load(query) {
-    listEl.innerHTML = "<p>Ładowanie...</p>";
+    listEl.innerHTML = "<p>Loading...</p>";
     try {
       const plugins = await apiFetch(`/plugins${query ? `?query=${encodeURIComponent(query)}` : ""}`);
       if (!plugins.length) {
-        listEl.innerHTML = "<div class=\"empty\">Brak wyników.</div>";
+        listEl.innerHTML = "<div class=\"empty\">No results found.</div>";
         return;
       }
       listEl.innerHTML = plugins
@@ -205,19 +266,19 @@ function renderPluginList() {
             <h2>${plugin.name}</h2>
             <p>${plugin.id}</p>
             <div class="meta">
-              <span class="tag">${plugin.version ?? "brak wersji"}</span>
+              <span class="tag">${plugin.version ?? "no version"}</span>
               <span class="tag">${plugin.compatibility}</span>
             </div>
             <div class="actions">
-              <a class="button secondary" href="#/plugins/${plugin.id}">Szczegóły</a>
-              <a class="button" href="${plugin.package_url}">Pobierz</a>
+              <a class="button secondary" href="#/plugins/${plugin.id}">Details</a>
+              <a class="button" href="${plugin.package_url}">Download</a>
             </div>
           </div>
         `
         )
         .join("");
     } catch (error) {
-      listEl.innerHTML = `<div class="empty">Błąd: ${error.message}</div>`;
+      listEl.innerHTML = `<div class="empty">Error: ${error.message}</div>`;
     }
   }
 
@@ -236,7 +297,7 @@ async function renderMyPlugins() {
     const plugins = await apiFetch("/plugins/mine");
     view.innerHTML = `
       <div class="card">
-        <h2>Moje wtyczki</h2>
+        <h2>My plugins</h2>
         ${
           plugins.length
             ? `
@@ -244,10 +305,10 @@ async function renderMyPlugins() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Nazwa</th>
+                  <th>Name</th>
                   <th>Status</th>
-                  <th>Wersja</th>
-                  <th>Akcje</th>
+                  <th>Version</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -260,8 +321,8 @@ async function renderMyPlugins() {
                     <td>${plugin.status}</td>
                     <td>${plugin.version ?? "-"}</td>
                     <td>
-                      <a class="button secondary" href="#/plugins/${plugin.id}">Podgląd</a>
-                      <a class="button" href="#/plugins/${plugin.id}/edit">Edytuj</a>
+                      <a class="button secondary" href="#/plugins/${plugin.id}">Preview</a>
+                      <a class="button" href="#/plugins/${plugin.id}/edit">Edit</a>
                     </td>
                   </tr>
                 `
@@ -270,12 +331,12 @@ async function renderMyPlugins() {
               </tbody>
             </table>
           `
-            : `<div class="empty">Nie masz jeszcze wtyczek.</div>`
+            : `<div class="empty">You have not submitted any plugins yet.</div>`
         }
       </div>
     `;
   } catch (error) {
-    view.innerHTML = `<div class="card"><p>Nie udało się pobrać danych: ${error.message}</p></div>`;
+    view.innerHTML = `<div class="card"><p>Unable to load data: ${error.message}</p></div>`;
   }
 }
 
@@ -296,7 +357,7 @@ async function renderPluginDetail(pluginId) {
     }
 
     const status = manageInfo?.status ? `<span class="tag">${manageInfo.status}</span>` : "";
-    const owner = manageInfo?.owner ? `<span class="tag">Właściciel: ${manageInfo.owner}</span>` : "";
+    const owner = manageInfo?.owner ? `<span class="tag">Owner: ${manageInfo.owner}</span>` : "";
 
     view.innerHTML = `
       <div class="grid two">
@@ -304,7 +365,7 @@ async function renderPluginDetail(pluginId) {
           <h2>${plugin.name}</h2>
           <p>${plugin.id}</p>
           <div class="meta">
-            <span class="tag">${plugin.version ?? "brak wersji"}</span>
+            <span class="tag">${plugin.version ?? "no version"}</span>
             <span class="tag">${plugin.compatibility}</span>
             ${status}
             ${owner}
@@ -312,25 +373,25 @@ async function renderPluginDetail(pluginId) {
           <p class="helper" style="margin-top: 12px;">SHA256: ${plugin.sha256 ?? "-"}</p>
           <p class="helper">Signature: ${plugin.signature ?? "-"}</p>
           <div class="actions">
-            <a class="button" href="${plugin.package_url}">Pobierz</a>
+            <a class="button" href="${plugin.package_url}">Download</a>
             ${
               manageInfo
-                ? `<a class="button secondary" href="#/plugins/${plugin.id}/edit">Edytuj</a>`
+                ? `<a class="button secondary" href="#/plugins/${plugin.id}/edit">Edit</a>`
                 : ""
             }
           </div>
           <div class="actions" id="detailActions"></div>
         </div>
         <div class="card">
-          <h2>Wersje</h2>
+          <h2>Versions</h2>
           ${
             versions.length
               ? `
             <table class="table">
               <thead>
                 <tr>
-                  <th>Wersja</th>
-                  <th>Pakiet</th>
+                  <th>Version</th>
+                  <th>Package</th>
                 </tr>
               </thead>
               <tbody>
@@ -339,7 +400,7 @@ async function renderPluginDetail(pluginId) {
                     (version) => `
                   <tr>
                     <td>${version.version}</td>
-                    <td><a href="${version.package_url}">Pobierz</a></td>
+                    <td><a href="${version.package_url}">Download</a></td>
                   </tr>
                 `
                   )
@@ -347,7 +408,7 @@ async function renderPluginDetail(pluginId) {
               </tbody>
             </table>
           `
-              : `<div class="empty">Brak wersji.</div>`
+              : `<div class="empty">No versions yet.</div>`
           }
         </div>
       </div>
@@ -360,17 +421,17 @@ async function renderPluginDetail(pluginId) {
 
     const actions = [];
     if (requireRole(["developer", "admin"]) && ["draft", "rejected", "unpublished"].includes(manageInfo.status)) {
-      actions.push({ label: "Wyślij do zatwierdzenia", endpoint: "submit", className: "success" });
+      actions.push({ label: "Submit for review", endpoint: "submit", className: "success" });
     }
     if (requireRole(["admin"]) && manageInfo.status === "submitted") {
-      actions.push({ label: "Zatwierdź", endpoint: "approve", className: "success" });
-      actions.push({ label: "Odrzuć", endpoint: "reject", className: "danger" });
+      actions.push({ label: "Approve", endpoint: "approve", className: "success" });
+      actions.push({ label: "Reject", endpoint: "reject", className: "danger" });
     }
     if (requireRole(["admin"]) && manageInfo.status === "approved") {
-      actions.push({ label: "Opublikuj", endpoint: "publish", className: "success" });
+      actions.push({ label: "Publish", endpoint: "publish", className: "success" });
     }
     if (requireRole(["admin"]) && manageInfo.status === "published") {
-      actions.push({ label: "Wycofaj", endpoint: "unpublish", className: "warning" });
+      actions.push({ label: "Unpublish", endpoint: "unpublish", className: "warning" });
     }
 
     if (!actions.length) {
@@ -390,15 +451,15 @@ async function renderPluginDetail(pluginId) {
         const endpoint = button.dataset.endpoint;
         try {
           await apiFetch(`/plugins/${pluginId}/${endpoint}`, { method: "POST" });
-          setStatus("Zaktualizowano status wtyczki.", "info");
+          setStatus("Plugin status updated.", "success");
           renderPluginDetail(pluginId);
         } catch (error) {
-          setStatus(`Błąd: ${error.message}`, "warning");
+          setStatus(`Error: ${error.message}`, "warning");
         }
       });
     });
   } catch (error) {
-    view.innerHTML = `<div class="card"><p>Nie udało się pobrać szczegółów: ${error.message}</p></div>`;
+    view.innerHTML = `<div class="card"><p>Unable to load details: ${error.message}</p></div>`;
   }
 }
 
@@ -409,28 +470,28 @@ async function renderPluginForm(mode, pluginId) {
     try {
       plugin = await apiFetch(`/plugins/${pluginId}/manage`);
     } catch (error) {
-      view.innerHTML = `<div class="card"><p>Nie udało się pobrać danych: ${error.message}</p></div>`;
+      view.innerHTML = `<div class="card"><p>Unable to load data: ${error.message}</p></div>`;
       return;
     }
   }
 
   view.innerHTML = `
     <div class="card">
-      <h2>${mode === "edit" ? "Edytuj wtyczkę" : "Dodaj wtyczkę"}</h2>
+      <h2>${mode === "edit" ? "Edit plugin" : "Submit a plugin"}</h2>
       <form class="form" id="pluginForm">
         <div>
-          <label for="id">ID wtyczki</label>
+          <label for="id">Plugin ID</label>
           <input id="id" name="id" value="${plugin.id}" ${mode === "edit" ? "disabled" : "required"} />
         </div>
         <div>
-          <label for="name">Nazwa</label>
+          <label for="name">Name</label>
           <input id="name" name="name" value="${plugin.name}" required />
         </div>
         <div>
-          <label for="compatibility">Kompatybilność</label>
+          <label for="compatibility">Compatibility</label>
           <input id="compatibility" name="compatibility" value="${plugin.compatibility}" required />
         </div>
-        <button class="button" type="submit">Zapisz</button>
+        <button class="button" type="submit">Save</button>
       </form>
     </div>
   `;
@@ -451,7 +512,7 @@ async function renderPluginForm(mode, pluginId) {
           method: "PUT",
           body: JSON.stringify(payload),
         });
-        setStatus("Zapisano zmiany.", "info");
+        setStatus("Changes saved.", "success");
         location.hash = `#/plugins/${plugin.id}`;
         return;
       }
@@ -459,10 +520,10 @@ async function renderPluginForm(mode, pluginId) {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setStatus("Utworzono nową wtyczkę.", "info");
+      setStatus("Plugin created.", "success");
       location.hash = "#/my-plugins";
     } catch (error) {
-      setStatus(`Błąd: ${error.message}`, "warning");
+      setStatus(`Error: ${error.message}`, "warning");
     }
   });
 }
@@ -474,7 +535,7 @@ async function renderApprovalQueue() {
     const queue = plugins.filter((plugin) => plugin.status === "submitted");
     view.innerHTML = `
       <div class="card">
-        <h2>Kolejka zatwierdzeń</h2>
+        <h2>Approval queue</h2>
         ${
           queue.length
             ? `
@@ -482,9 +543,9 @@ async function renderApprovalQueue() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Nazwa</th>
-                  <th>Wersja</th>
-                  <th>Akcje</th>
+                  <th>Name</th>
+                  <th>Version</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -496,8 +557,8 @@ async function renderApprovalQueue() {
                     <td>${plugin.name}</td>
                     <td>${plugin.version ?? "-"}</td>
                     <td>
-                      <button class="button success" data-action="approve" data-id="${plugin.id}">Zatwierdź</button>
-                      <button class="button danger" data-action="reject" data-id="${plugin.id}">Odrzuć</button>
+                      <button class="button success" data-action="approve" data-id="${plugin.id}">Approve</button>
+                      <button class="button danger" data-action="reject" data-id="${plugin.id}">Reject</button>
                     </td>
                   </tr>
                 `
@@ -506,7 +567,7 @@ async function renderApprovalQueue() {
               </tbody>
             </table>
           `
-            : `<div class="empty">Brak wtyczek do zatwierdzenia.</div>`
+            : `<div class="empty">No submissions awaiting review.</div>`
         }
       </div>
     `;
@@ -517,15 +578,15 @@ async function renderApprovalQueue() {
         const id = button.dataset.id;
         try {
           await apiFetch(`/plugins/${id}/${action}`, { method: "POST" });
-          setStatus("Zaktualizowano status.", "info");
+          setStatus("Status updated.", "success");
           renderApprovalQueue();
         } catch (error) {
-          setStatus(`Błąd: ${error.message}`, "warning");
+          setStatus(`Error: ${error.message}`, "warning");
         }
       });
     });
   } catch (error) {
-    view.innerHTML = `<div class="card"><p>Nie udało się pobrać kolejki: ${error.message}</p></div>`;
+    view.innerHTML = `<div class="card"><p>Unable to load queue: ${error.message}</p></div>`;
   }
 }
 
@@ -536,20 +597,20 @@ async function renderUserManagement() {
     view.innerHTML = `
       <div class="grid two">
         <div class="card">
-          <h2>Użytkownicy</h2>
+          <h2>Users</h2>
           ${
             users.length
               ? `
             <table class="table">
               <thead>
                 <tr>
-                  <th>Użytkownik</th>
-                  <th>Rola</th>
-                  <th>Nowa rola</th>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>New role</th>
                   <th>Status</th>
-                  <th>Nowy status</th>
-                  <th>Hasło</th>
-                  <th>Akcje</th>
+                  <th>New status</th>
+                  <th>Password</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -566,17 +627,17 @@ async function renderUserManagement() {
                         <option value="admin">admin</option>
                       </select>
                     </td>
-                    <td>${user.active ? "Aktywne" : "Nieaktywne"}</td>
+                    <td>${user.active ? "Active" : "Inactive"}</td>
                     <td>
                       <select data-active="${user.username}">
-                        <option value="true">Aktywne</option>
-                        <option value="false">Nieaktywne</option>
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
                       </select>
                     </td>
-                    <td><input type="password" data-pass="${user.username}" placeholder="Nowe hasło" /></td>
+                    <td><input type="password" data-pass="${user.username}" placeholder="New password" /></td>
                     <td>
-                      <button class="button" data-update="${user.username}">Zapisz</button>
-                      <button class="button danger" data-delete="${user.username}">Usuń</button>
+                      <button class="button" data-update="${user.username}">Save</button>
+                      <button class="button danger" data-delete="${user.username}">Delete</button>
                     </td>
                   </tr>
                 `
@@ -585,22 +646,22 @@ async function renderUserManagement() {
               </tbody>
             </table>
           `
-              : `<div class="empty">Brak użytkowników.</div>`
+              : `<div class="empty">No users found.</div>`
           }
         </div>
         <div class="card">
-          <h2>Dodaj użytkownika</h2>
+          <h2>Add user</h2>
           <form class="form" id="userForm">
             <div>
-              <label for="newUsername">Nazwa użytkownika</label>
+              <label for="newUsername">Username</label>
               <input id="newUsername" name="username" required />
             </div>
             <div>
-              <label for="newPassword">Hasło</label>
+              <label for="newPassword">Password</label>
               <input id="newPassword" name="password" type="password" required />
             </div>
             <div>
-              <label for="newRole">Rola</label>
+              <label for="newRole">Role</label>
               <select id="newRole" name="role">
                 <option value="user">user</option>
                 <option value="developer">developer</option>
@@ -608,13 +669,13 @@ async function renderUserManagement() {
               </select>
             </div>
             <div>
-              <label for="newActive">Status konta</label>
+              <label for="newActive">Account status</label>
               <select id="newActive" name="active">
-                <option value="true" selected>Aktywne</option>
-                <option value="false">Nieaktywne</option>
+                <option value="true" selected>Active</option>
+                <option value="false">Inactive</option>
               </select>
             </div>
-            <button class="button" type="submit">Dodaj</button>
+            <button class="button" type="submit">Add user</button>
           </form>
         </div>
       </div>
@@ -647,10 +708,10 @@ async function renderUserManagement() {
             method: "PATCH",
             body: JSON.stringify(payload),
           });
-          setStatus("Zaktualizowano użytkownika.", "info");
+          setStatus("User updated.", "success");
           renderUserManagement();
         } catch (error) {
-          setStatus(`Błąd: ${error.message}`, "warning");
+          setStatus(`Error: ${error.message}`, "warning");
         }
       });
     });
@@ -658,15 +719,15 @@ async function renderUserManagement() {
     view.querySelectorAll("button[data-delete]").forEach((button) => {
       button.addEventListener("click", async () => {
         const username = button.dataset.delete;
-        if (!confirm(`Usunąć użytkownika ${username}?`)) {
+        if (!confirm(`Delete user ${username}?`)) {
           return;
         }
         try {
           await apiFetch(`/admin/users/${username}`, { method: "DELETE" });
-          setStatus("Usunięto użytkownika.", "info");
+          setStatus("User deleted.", "success");
           renderUserManagement();
         } catch (error) {
-          setStatus(`Błąd: ${error.message}`, "warning");
+          setStatus(`Error: ${error.message}`, "warning");
         }
       });
     });
@@ -681,25 +742,26 @@ async function renderUserManagement() {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        setStatus("Utworzono użytkownika.", "info");
+        setStatus("User created.", "success");
         renderUserManagement();
       } catch (error) {
-        setStatus(`Błąd: ${error.message}`, "warning");
+        setStatus(`Error: ${error.message}`, "warning");
       }
     });
   } catch (error) {
-    view.innerHTML = `<div class="card"><p>Nie udało się pobrać użytkowników: ${error.message}</p></div>`;
+    view.innerHTML = `<div class="card"><p>Unable to load users: ${error.message}</p></div>`;
   }
 }
 
 function route() {
   setStatus("");
   renderNav();
-  const hash = location.hash || "#/plugins";
+  const hash = location.hash || "#/home";
   const routes = [
+    { pattern: /^#\/home$/, view: renderHome },
     { pattern: /^#\/plugins$/, view: renderPluginList },
     { pattern: /^#\/plugins\/$/, view: renderPluginList },
-    { pattern: /^#\/$/, view: renderPluginList },
+    { pattern: /^#\/$/, view: renderHome },
     { pattern: /^#\/plugins\/new$/, view: () => renderPluginForm("create") },
     { pattern: /^#\/plugins\/([^/]+)\/edit$/, view: (id) => renderPluginForm("edit", id) },
     { pattern: /^#\/plugins\/([^/]+)$/, view: (id) => renderPluginDetail(id) },
