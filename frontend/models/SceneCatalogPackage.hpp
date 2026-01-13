@@ -95,7 +95,7 @@ struct SceneCatalogEntry {
 };
 
 struct SceneCatalogApiConfig {
-	std::string baseUrl = "http://localhost:8080/portal/api";
+	std::string baseUrl = "https://portal.unique-stream-studio.com/portal/api";
 	std::string packagesEndpoint = "/scene-catalog/packages";
 	std::string packageEndpoint = "/scene-catalog/packages/%1";
 

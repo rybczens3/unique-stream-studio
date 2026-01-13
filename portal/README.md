@@ -12,7 +12,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-Base URL for the frontend client: `http://localhost:8080/portal/api`.
+Hosted base URL for the frontend client: `https://portal.unique-stream-studio.com/portal/api`.
+Local development base URL: `http://localhost:8080/portal/api`.
 
 ## API overview
 
