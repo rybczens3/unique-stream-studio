@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import Body, FastAPI, Header, HTTPException, Query
 from fastapi.responses import Response
 
 from .models import (
     AccountInfo,
+    ActionReasonRequest,
+    AuditLogEntry,
     LoginRequest,
     PluginCreateRequest,
     PluginMetadata,
@@ -20,11 +23,13 @@ from .models import (
     UserUpdateRequest,
 )
 from .storage import (
+    AUDIT_LOGS,
     PLUGINS,
     PERMISSIONS,
     ROLES,
     TOKENS,
     USERS,
+    AuditLogEntry as AuditLogEntryRecord,
     PluginRecord,
     PluginVersion,
     compute_sha256,
@@ -40,6 +45,27 @@ BASE_PATH = "/portal/api"
 
 seed_plugins("http://localhost:8080" + BASE_PATH)
 seed_users()
+
+
+def record_audit_log(
+    *,
+    actor: str,
+    action: str,
+    target_type: str,
+    target_id: str,
+    reason: Optional[str] = None,
+    metadata: Optional[dict[str, str]] = None,
+) -> None:
+    entry = AuditLogEntryRecord(
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        actor=actor,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        reason=reason,
+        metadata=metadata or {},
+    )
+    AUDIT_LOGS.append(entry)
 
 
 def get_session(authorization: Optional[str]) -> Optional[dict]:
@@ -302,6 +328,13 @@ def update_plugin(
     plugin.name = payload.name
     plugin.compatibility = payload.compatibility
     latest = plugin.versions[-1]
+    record_audit_log(
+        actor=session["username"],
+        action="plugin.edit",
+        target_type="plugin",
+        target_id=plugin.id,
+        metadata={"scope": "admin"},
+    )
     return PluginMetadata(
         id=plugin.id,
         name=plugin.name,
@@ -322,6 +355,13 @@ def delete_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -
     if plugin_id not in PLUGINS:
         raise HTTPException(status_code=404, detail="Plugin not found")
     del PLUGINS[plugin_id]
+    record_audit_log(
+        actor=session["username"],
+        action="plugin.delete",
+        target_type="plugin",
+        target_id=plugin_id,
+        metadata={"scope": "admin"},
+    )
 
 
 @app.post(BASE_PATH + "/plugins", response_model=PluginRecordInfo)
@@ -397,6 +437,13 @@ def update_plugin_self(
 
     plugin.name = payload.name
     plugin.compatibility = payload.compatibility
+    record_audit_log(
+        actor=session["username"],
+        action="plugin.edit",
+        target_type="plugin",
+        target_id=plugin.id,
+        metadata={"scope": "owner"},
+    )
     return plugin_record_info(plugin)
 
 
@@ -410,6 +457,13 @@ def delete_plugin_self(plugin_id: str, authorization: Optional[str] = Header(Non
         raise HTTPException(status_code=404, detail="Plugin not found")
     require_owner_or_admin(session, plugin)
     del PLUGINS[plugin_id]
+    record_audit_log(
+        actor=session["username"],
+        action="plugin.delete",
+        target_type="plugin",
+        target_id=plugin_id,
+        metadata={"scope": "owner" if session["role"] != "admin" else "admin"},
+    )
 
 
 @app.post(BASE_PATH + "/plugins/{plugin_id}/submit", response_model=PluginRecordInfo)
@@ -443,7 +497,11 @@ def approve_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) 
 
 
 @app.post(BASE_PATH + "/plugins/{plugin_id}/reject", response_model=PluginRecordInfo)
-def reject_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+def reject_plugin(
+    plugin_id: str,
+    payload: Optional[ActionReasonRequest] = Body(default=None),
+    authorization: Optional[str] = Header(None),
+) -> PluginRecordInfo:
     session = require_session(authorization)
     require_role(session, {"admin"})
 
@@ -453,11 +511,22 @@ def reject_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -
     if plugin.status != "submitted":
         raise HTTPException(status_code=400, detail="Plugin cannot be rejected")
     plugin.status = "rejected"
+    record_audit_log(
+        actor=session["username"],
+        action="plugin.reject",
+        target_type="plugin",
+        target_id=plugin.id,
+        reason=payload.reason if payload else None,
+    )
     return plugin_record_info(plugin)
 
 
 @app.post(BASE_PATH + "/plugins/{plugin_id}/publish", response_model=PluginRecordInfo)
-def publish_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+def publish_plugin(
+    plugin_id: str,
+    payload: Optional[ActionReasonRequest] = Body(default=None),
+    authorization: Optional[str] = Header(None),
+) -> PluginRecordInfo:
     session = require_session(authorization)
     require_role(session, {"admin"})
 
@@ -469,6 +538,13 @@ def publish_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) 
     if not plugin.versions:
         raise HTTPException(status_code=400, detail="Plugin has no versions to publish")
     plugin.status = "published"
+    record_audit_log(
+        actor=session["username"],
+        action="plugin.publish",
+        target_type="plugin",
+        target_id=plugin.id,
+        reason=payload.reason if payload else None,
+    )
     return plugin_record_info(plugin)
 
 
@@ -493,6 +569,24 @@ def list_users(authorization: Optional[str] = Header(None)) -> List[UserInfo]:
     return [UserInfo(username=username, role=user["role"]) for username, user in USERS.items()]
 
 
+@app.get(BASE_PATH + "/admin/audit", response_model=List[AuditLogEntry])
+def list_audit_logs(authorization: Optional[str] = Header(None)) -> List[AuditLogEntry]:
+    session = require_session(authorization)
+    require_role(session, {"admin"})
+    return [
+        AuditLogEntry(
+            timestamp=entry.timestamp,
+            actor=entry.actor,
+            action=entry.action,
+            target_type=entry.target_type,
+            target_id=entry.target_id,
+            reason=entry.reason,
+            metadata=entry.metadata,
+        )
+        for entry in reversed(AUDIT_LOGS)
+    ]
+
+
 @app.post(BASE_PATH + "/admin/users", response_model=UserInfo)
 def create_user(payload: UserCreateRequest, authorization: Optional[str] = Header(None)) -> UserInfo:
     session = require_session(authorization)
@@ -514,12 +608,21 @@ def update_user(
     user = USERS.get(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    previous_role = user["role"]
     if payload.role:
         if payload.role not in ROLES:
             raise HTTPException(status_code=400, detail="Invalid role")
         user["role"] = payload.role
     if payload.password:
         user["password"] = payload.password
+    if payload.role and payload.role != previous_role:
+        record_audit_log(
+            actor=session["username"],
+            action="user.role_change",
+            target_type="user",
+            target_id=username,
+            metadata={"from": previous_role, "to": user["role"]},
+        )
     return UserInfo(username=username, role=user["role"])
 
 

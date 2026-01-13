@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 
 def package_bytes(plugin_id: str, version: str) -> bytes:
@@ -33,6 +33,17 @@ class PluginRecord:
     versions: List[PluginVersion] = field(default_factory=list)
 
 
+@dataclass
+class AuditLogEntry:
+    timestamp: str
+    actor: str
+    action: str
+    target_type: str
+    target_id: str
+    reason: Optional[str] = None
+    metadata: Dict[str, str] = field(default_factory=dict)
+
+
 ROLES: Set[str] = {"user", "developer", "admin"}
 PERMISSIONS = {
     "user": {"plugins:read"},
@@ -47,6 +58,8 @@ TOKENS: Dict[str, Dict[str, str]] = {}
 PLUGINS: Dict[str, PluginRecord] = {}
 
 PLUGIN_STATUSES: Set[str] = {"draft", "submitted", "approved", "rejected", "published", "unpublished"}
+
+AUDIT_LOGS: List[AuditLogEntry] = []
 
 
 def seed_users() -> None:

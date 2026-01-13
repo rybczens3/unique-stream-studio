@@ -85,3 +85,17 @@ class PluginVersionRequest(BaseModel):
     package_url: str
     sha256: str
     signature: str
+
+
+class ActionReasonRequest(BaseModel):
+    reason: str | None = None
+
+
+class AuditLogEntry(BaseModel):
+    timestamp: str
+    actor: str
+    action: str
+    target_type: str
+    target_id: str
+    reason: str | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)

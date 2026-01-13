@@ -95,6 +95,7 @@ function renderNav() {
   if (requireRole(["admin"])) {
     links.push({ href: "#/admin/queue", label: "Kolejka zatwierdzeń" });
     links.push({ href: "#/admin/users", label: "Użytkownicy" });
+    links.push({ href: "#/admin/audit", label: "Log audytu" });
   }
   links.push({ href: "#/login", label: state.user ? "Sesja" : "Logowanie" });
 
@@ -389,7 +390,17 @@ async function renderPluginDetail(pluginId) {
       button.addEventListener("click", async () => {
         const endpoint = button.dataset.endpoint;
         try {
-          await apiFetch(`/plugins/${pluginId}/${endpoint}`, { method: "POST" });
+          const payload = {};
+          if (endpoint === "reject") {
+            const reason = prompt("Podaj powód odrzucenia (opcjonalnie):", "");
+            if (reason) {
+              payload.reason = reason;
+            }
+          }
+          await apiFetch(`/plugins/${pluginId}/${endpoint}`, {
+            method: "POST",
+            body: Object.keys(payload).length ? JSON.stringify(payload) : undefined,
+          });
           setStatus("Zaktualizowano status wtyczki.", "info");
           renderPluginDetail(pluginId);
         } catch (error) {
@@ -516,7 +527,17 @@ async function renderApprovalQueue() {
         const action = button.dataset.action;
         const id = button.dataset.id;
         try {
-          await apiFetch(`/plugins/${id}/${action}`, { method: "POST" });
+          const payload = {};
+          if (action === "reject") {
+            const reason = prompt("Powód odrzucenia (opcjonalnie):", "");
+            if (reason) {
+              payload.reason = reason;
+            }
+          }
+          await apiFetch(`/plugins/${id}/${action}`, {
+            method: "POST",
+            body: Object.keys(payload).length ? JSON.stringify(payload) : undefined,
+          });
           setStatus("Zaktualizowano status.", "info");
           renderApprovalQueue();
         } catch (error) {
@@ -670,6 +691,54 @@ async function renderUserManagement() {
   }
 }
 
+async function renderAuditLogs() {
+  renderLoading();
+  try {
+    const logs = await apiFetch("/admin/audit");
+    view.innerHTML = `
+      <div class="card">
+        <h2>Log audytu</h2>
+        ${
+          logs.length
+            ? `
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Użytkownik</th>
+                  <th>Akcja</th>
+                  <th>Obiekt</th>
+                  <th>Powód</th>
+                  <th>Szczegóły</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${logs
+                  .map(
+                    (entry) => `
+                  <tr>
+                    <td>${entry.timestamp}</td>
+                    <td>${entry.actor}</td>
+                    <td>${entry.action}</td>
+                    <td>${entry.target_type}: ${entry.target_id}</td>
+                    <td>${entry.reason ?? "-"}</td>
+                    <td>${entry.metadata && Object.keys(entry.metadata).length ? JSON.stringify(entry.metadata) : "-"}</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          `
+            : `<div class="empty">Brak wpisów w logu.</div>`
+        }
+      </div>
+    `;
+  } catch (error) {
+    view.innerHTML = `<div class="card"><p>Nie udało się pobrać logów: ${error.message}</p></div>`;
+  }
+}
+
 function route() {
   setStatus("");
   renderNav();
@@ -684,6 +753,7 @@ function route() {
     { pattern: /^#\/my-plugins$/, view: renderMyPlugins },
     { pattern: /^#\/admin\/queue$/, view: renderApprovalQueue },
     { pattern: /^#\/admin\/users$/, view: renderUserManagement },
+    { pattern: /^#\/admin\/audit$/, view: renderAuditLogs },
     { pattern: /^#\/login$/, view: renderLogin },
   ];
 
