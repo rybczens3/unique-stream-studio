@@ -96,6 +96,7 @@ function renderNav() {
   if (requireRole(["admin"])) {
     links.push({ href: "#/admin/queue", label: "Approval Queue" });
     links.push({ href: "#/admin/users", label: "Users" });
+    links.push({ href: "#/admin/audit", label: "Audit Logs" });
   }
   links.push({ href: "#/login", label: state.user ? "Session" : "Sign In" });
 
@@ -449,8 +450,13 @@ async function renderPluginDetail(pluginId) {
     detailActions.querySelectorAll("button").forEach((button) => {
       button.addEventListener("click", async () => {
         const endpoint = button.dataset.endpoint;
+        let reason = "";
+        if (endpoint === "reject") {
+          reason = prompt("Rejection reason (optional):") ?? "";
+        }
         try {
-          await apiFetch(`/plugins/${pluginId}/${endpoint}`, { method: "POST" });
+          const reasonParam = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+          await apiFetch(`/plugins/${pluginId}/${endpoint}${reasonParam}`, { method: "POST" });
           setStatus("Plugin status updated.", "success");
           renderPluginDetail(pluginId);
         } catch (error) {
@@ -576,8 +582,13 @@ async function renderApprovalQueue() {
       button.addEventListener("click", async () => {
         const action = button.dataset.action;
         const id = button.dataset.id;
+        let reason = "";
+        if (action === "reject") {
+          reason = prompt("Rejection reason (optional):") ?? "";
+        }
         try {
-          await apiFetch(`/plugins/${id}/${action}`, { method: "POST" });
+          const reasonParam = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+          await apiFetch(`/plugins/${id}/${action}${reasonParam}`, { method: "POST" });
           setStatus("Status updated.", "success");
           renderApprovalQueue();
         } catch (error) {
@@ -693,6 +704,7 @@ async function renderUserManagement() {
       button.addEventListener("click", async () => {
         const username = button.dataset.update;
         const role = view.querySelector(`select[data-role="${username}"]`).value;
+        const currentRole = users.find((user) => user.username === username)?.role;
         const password = view.querySelector(`input[data-pass="${username}"]`).value;
         const active = view.querySelector(`select[data-active="${username}"]`).value === "true";
         const payload = {};
@@ -704,7 +716,12 @@ async function renderUserManagement() {
         }
         payload.active = active;
         try {
-          await apiFetch(`/admin/users/${username}`, {
+          let reasonParam = "";
+          if (role && role !== currentRole) {
+            const reason = prompt("Reason for role change (optional):") ?? "";
+            reasonParam = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+          }
+          await apiFetch(`/admin/users/${username}${reasonParam}`, {
             method: "PATCH",
             body: JSON.stringify(payload),
           });
@@ -753,6 +770,55 @@ async function renderUserManagement() {
   }
 }
 
+async function renderAuditLogs() {
+  renderLoading();
+  try {
+    const logs = await apiFetch("/admin/audit-logs");
+    const rows = logs
+      .slice()
+      .reverse()
+      .map(
+        (entry) => `
+        <tr>
+          <td>${entry.timestamp}</td>
+          <td>${entry.actor}</td>
+          <td>${entry.action}</td>
+          <td>${entry.target}</td>
+          <td>${entry.reason ? entry.reason : "-"}</td>
+        </tr>
+      `
+      )
+      .join("");
+    view.innerHTML = `
+      <div class="card">
+        <h2>Audit logs</h2>
+        ${
+          logs.length
+            ? `
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Actor</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          `
+            : `<div class="empty">No audit log entries yet.</div>`
+        }
+      </div>
+    `;
+  } catch (error) {
+    view.innerHTML = `<div class="card"><p>Unable to load audit logs: ${error.message}</p></div>`;
+  }
+}
+
 function route() {
   setStatus("");
   renderNav();
@@ -768,6 +834,7 @@ function route() {
     { pattern: /^#\/my-plugins$/, view: renderMyPlugins },
     { pattern: /^#\/admin\/queue$/, view: renderApprovalQueue },
     { pattern: /^#\/admin\/users$/, view: renderUserManagement },
+    { pattern: /^#\/admin\/audit$/, view: renderAuditLogs },
     { pattern: /^#\/login$/, view: renderLogin },
   ];
 

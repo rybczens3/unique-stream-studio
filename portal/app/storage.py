@@ -33,6 +33,16 @@ class PluginRecord:
     versions: List[PluginVersion] = field(default_factory=list)
 
 
+@dataclass
+class AuditLogEntry:
+    id: str
+    timestamp: str
+    actor: str
+    action: str
+    target: str
+    reason: str | None = None
+
+
 ROLES: Set[str] = {"user", "developer", "admin"}
 PERMISSIONS = {
     "user": {"plugins:read"},
@@ -47,6 +57,8 @@ TOKENS: Dict[str, Dict[str, str]] = {}
 PLUGINS: Dict[str, PluginRecord] = {}
 
 PLUGIN_STATUSES: Set[str] = {"draft", "submitted", "approved", "rejected", "published", "unpublished"}
+
+AUDIT_LOGS: List[AuditLogEntry] = []
 
 
 def seed_users() -> None:

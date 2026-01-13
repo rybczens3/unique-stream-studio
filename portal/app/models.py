@@ -88,3 +88,12 @@ class PluginVersionRequest(BaseModel):
     package_url: str
     sha256: str
     signature: str
+
+
+class AuditLogEntry(BaseModel):
+    id: str
+    timestamp: str
+    actor: str
+    action: str
+    target: str
+    reason: str | None = None

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -8,6 +9,7 @@ from fastapi.responses import Response
 
 from .models import (
     AccountInfo,
+    AuditLogEntry as AuditLogEntryResponse,
     LoginRequest,
     PluginCreateRequest,
     PluginMetadata,
@@ -20,11 +22,13 @@ from .models import (
     UserUpdateRequest,
 )
 from .storage import (
+    AUDIT_LOGS,
     PLUGINS,
     PERMISSIONS,
     ROLES,
     TOKENS,
     USERS,
+    AuditLogEntry,
     PluginRecord,
     PluginVersion,
     compute_sha256,
@@ -104,6 +108,19 @@ def plugin_record_info(plugin: PluginRecord) -> PluginRecordInfo:
         package_url=latest.package_url if latest else None,
         sha256=latest.sha256 if latest else None,
         signature=latest.signature if latest else None,
+    )
+
+
+def record_audit_event(actor: str, action: str, target: str, reason: Optional[str] = None) -> None:
+    AUDIT_LOGS.append(
+        AuditLogEntry(
+            id=uuid.uuid4().hex,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            actor=actor,
+            action=action,
+            target=target,
+            reason=reason,
+        )
     )
 
 
@@ -304,6 +321,11 @@ def update_plugin(
     plugin.name = payload.name
     plugin.compatibility = payload.compatibility
     latest = plugin.versions[-1]
+    record_audit_event(
+        actor=session["username"],
+        action="plugin.edited",
+        target=plugin.id,
+    )
     return PluginMetadata(
         id=plugin.id,
         name=plugin.name,
@@ -316,7 +338,11 @@ def update_plugin(
 
 
 @app.delete(BASE_PATH + "/admin/plugins/{plugin_id}", status_code=204)
-def delete_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> None:
+def delete_plugin(
+    plugin_id: str,
+    authorization: Optional[str] = Header(None),
+    reason: Optional[str] = Query(default=None),
+) -> None:
     session = require_session(authorization)
     require_permission(session, "plugins:write")
     require_role(session, {"admin"})
@@ -324,6 +350,12 @@ def delete_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -
     if plugin_id not in PLUGINS:
         raise HTTPException(status_code=404, detail="Plugin not found")
     del PLUGINS[plugin_id]
+    record_audit_event(
+        actor=session["username"],
+        action="plugin.deleted",
+        target=plugin_id,
+        reason=reason,
+    )
 
 
 @app.post(BASE_PATH + "/plugins", response_model=PluginRecordInfo)
@@ -399,11 +431,20 @@ def update_plugin_self(
 
     plugin.name = payload.name
     plugin.compatibility = payload.compatibility
+    record_audit_event(
+        actor=session["username"],
+        action="plugin.edited",
+        target=plugin.id,
+    )
     return plugin_record_info(plugin)
 
 
 @app.delete(BASE_PATH + "/plugins/{plugin_id}", status_code=204)
-def delete_plugin_self(plugin_id: str, authorization: Optional[str] = Header(None)) -> None:
+def delete_plugin_self(
+    plugin_id: str,
+    authorization: Optional[str] = Header(None),
+    reason: Optional[str] = Query(default=None),
+) -> None:
     session = require_session(authorization)
     require_permission(session, "plugins:write")
 
@@ -412,6 +453,12 @@ def delete_plugin_self(plugin_id: str, authorization: Optional[str] = Header(Non
         raise HTTPException(status_code=404, detail="Plugin not found")
     require_owner_or_admin(session, plugin)
     del PLUGINS[plugin_id]
+    record_audit_event(
+        actor=session["username"],
+        action="plugin.deleted",
+        target=plugin_id,
+        reason=reason,
+    )
 
 
 @app.post(BASE_PATH + "/plugins/{plugin_id}/submit", response_model=PluginRecordInfo)
@@ -445,7 +492,11 @@ def approve_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) 
 
 
 @app.post(BASE_PATH + "/plugins/{plugin_id}/reject", response_model=PluginRecordInfo)
-def reject_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+def reject_plugin(
+    plugin_id: str,
+    authorization: Optional[str] = Header(None),
+    reason: Optional[str] = Query(default=None),
+) -> PluginRecordInfo:
     session = require_session(authorization)
     require_role(session, {"admin"})
 
@@ -455,11 +506,21 @@ def reject_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -
     if plugin.status != "submitted":
         raise HTTPException(status_code=400, detail="Plugin cannot be rejected")
     plugin.status = "rejected"
+    record_audit_event(
+        actor=session["username"],
+        action="plugin.rejected",
+        target=plugin.id,
+        reason=reason,
+    )
     return plugin_record_info(plugin)
 
 
 @app.post(BASE_PATH + "/plugins/{plugin_id}/publish", response_model=PluginRecordInfo)
-def publish_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+def publish_plugin(
+    plugin_id: str,
+    authorization: Optional[str] = Header(None),
+    reason: Optional[str] = Query(default=None),
+) -> PluginRecordInfo:
     session = require_session(authorization)
     require_role(session, {"admin"})
 
@@ -471,6 +532,12 @@ def publish_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) 
     if not plugin.versions:
         raise HTTPException(status_code=400, detail="Plugin has no versions to publish")
     plugin.status = "published"
+    record_audit_event(
+        actor=session["username"],
+        action="plugin.published",
+        target=plugin.id,
+        reason=reason,
+    )
     return plugin_record_info(plugin)
 
 
@@ -518,7 +585,10 @@ def create_user(payload: UserCreateRequest, authorization: Optional[str] = Heade
 
 @app.patch(BASE_PATH + "/admin/users/{username}", response_model=UserInfo)
 def update_user(
-    username: str, payload: UserUpdateRequest, authorization: Optional[str] = Header(None)
+    username: str,
+    payload: UserUpdateRequest,
+    authorization: Optional[str] = Header(None),
+    reason: Optional[str] = Query(default=None),
 ) -> UserInfo:
     session = require_session(authorization)
     require_permission(session, "users:manage")
@@ -529,6 +599,13 @@ def update_user(
     if payload.role:
         if payload.role not in ROLES:
             raise HTTPException(status_code=400, detail="Invalid role")
+        if payload.role != user["role"]:
+            record_audit_event(
+                actor=session["username"],
+                action="user.role_changed",
+                target=username,
+                reason=reason,
+            )
         user["role"] = payload.role
     if payload.password:
         user["password"] = payload.password
@@ -545,3 +622,21 @@ def delete_user(username: str, authorization: Optional[str] = Header(None)) -> N
     if username not in USERS:
         raise HTTPException(status_code=404, detail="User not found")
     del USERS[username]
+
+
+@app.get(BASE_PATH + "/admin/audit-logs", response_model=List[AuditLogEntryResponse])
+def list_audit_logs(authorization: Optional[str] = Header(None)) -> List[AuditLogEntryResponse]:
+    session = require_session(authorization)
+    require_permission(session, "users:manage")
+    require_role(session, {"admin"})
+    return [
+        AuditLogEntryResponse(
+            id=entry.id,
+            timestamp=entry.timestamp,
+            actor=entry.actor,
+            action=entry.action,
+            target=entry.target,
+            reason=entry.reason,
+        )
+        for entry in AUDIT_LOGS
+    ]
