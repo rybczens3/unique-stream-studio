@@ -21,6 +21,8 @@
 #include "OBSProjector.hpp"
 
 #include <dialogs/NameDialog.hpp>
+#include <models/SceneCatalogPackage.hpp>
+#include <models/SceneCollection.hpp>
 
 #include <qt-wrappers.hpp>
 
@@ -30,6 +32,7 @@
 #include <vector>
 
 using namespace std;
+using SceneCollection = OBS::SceneCollection;
 
 namespace {
 
@@ -48,6 +51,21 @@ QDataStream &operator>>(QDataStream &in, SignalContainer<OBSScene> &v)
 {
 	in >> v.ref;
 	return in;
+}
+
+std::string ReplaceToken(const std::string &input, const std::string &token, const std::string &value)
+{
+	if (token.empty())
+		return input;
+
+	std::string result = input;
+	size_t pos = 0;
+	while ((pos = result.find(token, pos)) != std::string::npos) {
+		result.replace(pos, token.size(), value);
+		pos += value.size();
+	}
+
+	return result;
 }
 
 } // namespace
@@ -833,6 +851,81 @@ void OBSBasic::CreateSceneUndoRedoAction(const QString &action_name, OBSData und
 	const char *redo_json = obs_data_get_last_json(redo_data);
 
 	undo_s.add_action(action_name, undo_redo, undo_redo, undo_json, redo_json);
+}
+
+bool OBSBasic::ImportSceneCatalogPackage(const OBS::SceneCatalogPackage &package,
+					 const std::filesystem::path &packageRoot, std::string &errorMessage)
+{
+	std::string collectionName = package.name.empty() ? package.id : package.name;
+	if (collectionName.empty()) {
+		errorMessage = "Scene package has no name or ID.";
+		return false;
+	}
+
+	SceneCollection *collectionRef = nullptr;
+	try {
+		collectionRef = &CreateSceneCollection(collectionName);
+	} catch (const std::exception &error) {
+		errorMessage = error.what();
+		return false;
+	}
+
+	std::filesystem::path assetRoot = App()->userScenesLocation / std::filesystem::u8path("scene-assets") /
+					  std::filesystem::u8path(package.id);
+	try {
+		std::filesystem::create_directories(assetRoot);
+	} catch (const std::filesystem::filesystem_error &error) {
+		errorMessage = std::string("Failed to create scene assets directory: ") + error.what();
+		return false;
+	}
+
+	std::string resolvedJson = ReplaceToken(package.collectionJson, package.assetRootToken, assetRoot.u8string());
+	OBSDataAutoRelease collectionData = obs_data_create_from_json(resolvedJson.c_str());
+	if (!collectionData) {
+		errorMessage = "Scene package collection payload could not be parsed.";
+		return false;
+	}
+
+	obs_data_set_string(collectionData, "name", collectionName.c_str());
+
+	OBSDataAutoRelease catalogData = obs_data_create();
+	obs_data_set_string(catalogData, "id", package.id.c_str());
+	obs_data_set_string(catalogData, "version", package.version.c_str());
+	obs_data_set_string(catalogData, "source", "scene-catalog");
+	obs_data_set_obj(collectionData, "catalog_package", catalogData);
+
+	bool saved = obs_data_save_json_pretty_safe(collectionData, collectionRef->getFilePathString().c_str(), "tmp",
+						    "bak");
+	if (!saved) {
+		errorMessage = "Failed to save scene collection data from package.";
+		return false;
+	}
+
+	for (const auto &resource : package.resources) {
+		if (resource.path.empty())
+			continue;
+
+		std::filesystem::path sourcePath = packageRoot / std::filesystem::u8path(resource.path);
+		std::filesystem::path destinationPath = assetRoot / std::filesystem::u8path(resource.path);
+		try {
+			std::filesystem::create_directories(destinationPath.parent_path());
+			if (std::filesystem::exists(sourcePath))
+				std::filesystem::copy_file(sourcePath, destinationPath,
+							   std::filesystem::copy_options::overwrite_existing);
+		} catch (const std::filesystem::filesystem_error &error) {
+			errorMessage = std::string("Failed to install scene assets: ") + error.what();
+			return false;
+		}
+	}
+
+	SceneCollection::CatalogMetadata metadata;
+	metadata.packageId = package.id;
+	metadata.packageVersion = package.version;
+	metadata.source = "scene-catalog";
+	collectionRef->setCatalogMetadata(metadata);
+
+	RefreshSceneCollections(true);
+	return true;
 }
 
 void OBSBasic::MoveSceneItem(enum obs_order_movement movement, const QString &action_name)

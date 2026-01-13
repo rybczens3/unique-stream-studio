@@ -68,4 +68,19 @@ void SceneCollection::setMigrationResolution(Rect newResolution)
 {
 	migrationResolution_ = newResolution;
 }
+
+const std::optional<SceneCollection::CatalogMetadata> &SceneCollection::getCatalogMetadata() const
+{
+	return catalogMetadata_;
+}
+
+void SceneCollection::setCatalogMetadata(const CatalogMetadata &metadata)
+{
+	catalogMetadata_ = metadata;
+}
+
+void SceneCollection::clearCatalogMetadata()
+{
+	catalogMetadata_.reset();
+}
 } // namespace OBS

@@ -22,6 +22,7 @@
 #include "ColorSelect.hpp"
 #include "OBSBasicControls.hpp"
 #include "OBSBasicStats.hpp"
+#include "SceneCatalogDock.hpp"
 #include "plugin-manager/PluginManager.hpp"
 #include "VolControl.hpp"
 
@@ -363,6 +364,13 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	statsDock->setVisible(false);
 	statsDock->setFloating(true);
 	statsDock->resize(700, 200);
+
+	sceneCatalogDock = new OBSDock();
+	sceneCatalogDock->setObjectName(QStringLiteral("sceneCatalogDock"));
+	sceneCatalogDock->setWindowTitle(tr("Scene Catalog"));
+	sceneCatalogDock->setWidget(new SceneCatalogDockWidget(this));
+	AddDockWidget(sceneCatalogDock, Qt::RightDockWidgetArea);
+	sceneCatalogDock->setVisible(false);
 
 	copyActionsDynamicProperties();
 

@@ -1,1 +1,10 @@
-target_sources(obs-studio PRIVATE models/Rect.cpp models/Rect.hpp models/SceneCollection.cpp models/SceneCollection.hpp)
+target_sources(
+  obs-studio
+  PRIVATE
+    models/Rect.cpp
+    models/Rect.hpp
+    models/SceneCatalogPackage.cpp
+    models/SceneCatalogPackage.hpp
+    models/SceneCollection.cpp
+    models/SceneCollection.hpp
+)
