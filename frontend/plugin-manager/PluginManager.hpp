@@ -42,6 +42,23 @@ struct ModuleInfo {
 	std::vector<std::string> servicesLoaded;
 };
 
+struct PluginPackageMetadata {
+	std::string id;
+	std::string name;
+	std::string version;
+	std::string compatibility;
+	std::string packageUrl;
+	std::string sha256;
+	std::string signature;
+};
+
+struct PortalSession {
+	std::string username;
+	std::string role;
+	std::string accessToken;
+	std::string refreshToken;
+};
+
 class PluginManager {
 private:
 	std::vector<ModuleInfo> modules_ = {};
@@ -49,17 +66,32 @@ private:
 	std::vector<std::string> disabledOutputs_ = {};
 	std::vector<std::string> disabledServices_ = {};
 	std::vector<std::string> disabledEncoders_ = {};
+	PortalSession portalSession_ = {};
+	std::string portalBaseUrl_ = "http://localhost:8080/portal/api";
 	std::filesystem::path getConfigFilePath_();
+	std::filesystem::path getPortalConfigFilePath_();
 	void loadModules_();
 	void saveModules_();
 	void disableModules_();
 	void addModuleTypes_();
 	void linkUnloadedModules_();
+	void loadPortalSession_();
+	void savePortalSession_();
+
+	bool verifyPackageHash_(const std::filesystem::path &packagePath, const std::string &expectedSha256,
+				std::string &errorMessage) const;
+	bool verifyPackageSignature_(const std::string &sha256, const std::string &signature,
+				     std::string &errorMessage) const;
 
 public:
 	void preLoad();
 	void postLoad();
 	void open();
+	bool downloadAndInstallPackage(const PluginPackageMetadata &metadata, const PortalSession &session,
+				       std::string &errorMessage);
+	const PortalSession &portalSession() const { return portalSession_; }
+	void setPortalSession(const PortalSession &session) { portalSession_ = session; }
+	const std::string &portalBaseUrl() const { return portalBaseUrl_; }
 
 	friend void addModuleToPluginManagerImpl(void *param, obs_module_t *newModule);
 };

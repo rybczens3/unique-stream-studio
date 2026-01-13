@@ -30,17 +30,45 @@ class PluginManagerWindow : public QDialog {
 	std::unique_ptr<Ui::PluginManagerWindow> ui;
 
 public:
-	explicit PluginManagerWindow(std::vector<ModuleInfo> const &modules, QWidget *parent = nullptr);
+	explicit PluginManagerWindow(PluginManager *manager, std::vector<ModuleInfo> const &modules,
+				     PortalSession const &session, std::string const &portalBaseUrl,
+				     QWidget *parent = nullptr);
 	inline std::vector<ModuleInfo> const result() { return modules_; }
+	inline PortalSession const portalSessionResult() { return portalSession_; }
 
 private:
+	PluginManager *manager_ = nullptr;
 	std::vector<ModuleInfo> modules_;
+	PortalSession portalSession_;
+	std::string portalBaseUrl_;
 
 	void sectionSelectionChanged();
 	QPersistentModelIndex activeSectionIndex;
 	void setSection(QPersistentModelIndex index);
 
 	bool isEnabledPluginsChanged();
+
+	struct CatalogEntry {
+		QString id;
+		QString name;
+		QString version;
+		QString compatibility;
+		QString packageUrl;
+		QString sha256;
+		QString signature;
+	};
+
+	void setupConnections_();
+	void refreshAccountUi_();
+	void handleLogin_();
+	void handleLogout_();
+	void loadDiscover_();
+	void loadUpdates_();
+	std::vector<CatalogEntry> fetchCatalog_(const QString &query);
+	void populateDiscoverList_(const std::vector<CatalogEntry> &entries);
+	void populateUpdatesList_(const std::vector<CatalogEntry> &entries);
+	void clearLayout_(QLayout *layout);
+	int compareVersions_(const QString &left, const QString &right) const;
 };
 
 }; // namespace OBS
