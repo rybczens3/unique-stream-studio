@@ -2,6 +2,8 @@
 
 #include "BasicOutputHandler.hpp"
 
+#include <vector>
+
 struct AdvancedOutput : BasicOutputHandler {
 	OBSEncoder streamAudioEnc;
 	OBSEncoder streamArchiveEnc;
@@ -9,6 +11,7 @@ struct AdvancedOutput : BasicOutputHandler {
 	OBSEncoder recordTrack[MAX_AUDIO_MIXES];
 	OBSEncoder videoStreaming;
 	OBSEncoder videoRecording;
+	std::vector<OBSOutputAutoRelease> extraStreamOutputs;
 
 	bool ffmpegOutput;
 	bool ffmpegRecording;
@@ -29,6 +32,7 @@ struct AdvancedOutput : BasicOutputHandler {
 	inline void SetupStreaming();
 	inline void SetupRecording();
 	inline void SetupFFmpeg();
+	void PrepareExtraStreamOutputs(const std::string &type, bool is_multitrack_output, int multiTrackAudioMixes);
 	void SetupOutputs() override;
 	int GetAudioBitrate(size_t i, const char *id) const;
 

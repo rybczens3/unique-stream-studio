@@ -2,6 +2,8 @@
 
 #include "BasicOutputHandler.hpp"
 
+#include <vector>
+
 struct SimpleOutput : BasicOutputHandler {
 	OBSEncoder audioStreaming;
 	OBSEncoder videoStreaming;
@@ -9,6 +11,7 @@ struct SimpleOutput : BasicOutputHandler {
 	OBSEncoder audioArchive;
 	OBSEncoder videoRecording;
 	OBSEncoder audioTrack[MAX_AUDIO_MIXES];
+	std::vector<OBSOutputAutoRelease> extraStreamOutputs;
 
 	std::string videoEncoder;
 	std::string videoQuality;

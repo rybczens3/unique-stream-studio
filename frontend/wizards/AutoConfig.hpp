@@ -52,6 +52,11 @@ class AutoConfig : public QWizard {
 		std::string name;
 		std::string address;
 	};
+	struct StreamTarget {
+		std::string platform;
+		std::string server;
+		std::string key;
+	};
 
 	static inline const char *GetEncoderId(Encoder enc);
 
@@ -80,6 +85,7 @@ class AutoConfig : public QWizard {
 	std::string server;
 	std::vector<StreamServer> serviceConfigServers;
 	std::string key;
+	std::vector<StreamTarget> streamTargets;
 
 	bool hardwareEncodingAvailable = false;
 	bool nvencAvailable = false;

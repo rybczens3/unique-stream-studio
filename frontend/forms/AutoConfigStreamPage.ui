@@ -527,6 +527,68 @@
          </layout>
         </widget>
        </item>
+       <item row="12" column="0" colspan="2">
+        <widget class="QGroupBox" name="multiServiceTargetsGroupBox">
+         <property name="title">
+          <string>Multi-Platform Targets</string>
+         </property>
+         <layout class="QVBoxLayout" name="multiServiceTargetsLayout">
+          <item>
+           <widget class="QTableWidget" name="multiServiceTargetsTable">
+            <property name="columnCount">
+             <number>3</number>
+            </property>
+            <column>
+             <property name="text">
+              <string>Platform</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Server URL</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Stream Key</string>
+             </property>
+            </column>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="multiServiceTargetsButtonsLayout">
+            <item>
+             <widget class="QPushButton" name="addTargetButton">
+              <property name="text">
+               <string>Add Target</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="removeTargetButton">
+              <property name="text">
+               <string>Remove Target</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_multiTargets">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
       </layout>
      </widget>
     </widget>

@@ -13,6 +13,8 @@
 
 #include <qt-wrappers.hpp>
 
+#include <QHeaderView>
+
 #include "moc_AutoConfigStreamPage.cpp"
 
 enum class ListOpt : int {
@@ -78,6 +80,8 @@ AutoConfigStreamPage::AutoConfigStreamPage(QWidget *parent) : QWizardPage(parent
 	connect(ui->regionEU, &QCheckBox::toggled, this, &AutoConfigStreamPage::UpdateCompleted);
 	connect(ui->regionAsia, &QCheckBox::toggled, this, &AutoConfigStreamPage::UpdateCompleted);
 	connect(ui->regionOther, &QCheckBox::toggled, this, &AutoConfigStreamPage::UpdateCompleted);
+
+	InitializeMultiServiceTargetsUI();
 }
 
 AutoConfigStreamPage::~AutoConfigStreamPage() {}
@@ -153,6 +157,11 @@ bool AutoConfigStreamPage::validatePage()
 	if (ui->preferHardware)
 		wiz->preferHardware = ui->preferHardware->isChecked();
 	wiz->key = QT_TO_UTF8(ui->key->text());
+	wiz->streamTargets.clear();
+	for (const auto &target : CollectStreamTargets()) {
+		wiz->streamTargets.push_back({QT_TO_UTF8(target.platform), QT_TO_UTF8(target.server),
+					      QT_TO_UTF8(target.key)});
+	}
 
 	if (!wiz->customServer) {
 		if (wiz->serviceName == "Twitch")
@@ -238,6 +247,100 @@ bool AutoConfigStreamPage::validatePage()
 	}
 
 	return true;
+}
+
+static QStringList StreamTargetPlatforms()
+{
+	return {"YouTube", "Twitch", "Facebook", "Instagram", "Custom"};
+}
+
+void AutoConfigStreamPage::InitializeMultiServiceTargetsUI()
+{
+	ui->multiServiceTargetsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+	ui->multiServiceTargetsTable->setSelectionMode(QAbstractItemView::SingleSelection);
+	ui->multiServiceTargetsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+	ui->multiServiceTargetsTable->verticalHeader()->setVisible(false);
+	ui->multiServiceTargetsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+	connect(ui->multiServiceTargetsTable->selectionModel(), &QItemSelectionModel::selectionChanged, this,
+		&AutoConfigStreamPage::UpdateTargetButtons);
+
+	UpdateTargetButtons();
+}
+
+void AutoConfigStreamPage::AddStreamTargetRow(const StreamTargetEntry &entry)
+{
+	int row = ui->multiServiceTargetsTable->rowCount();
+	ui->multiServiceTargetsTable->insertRow(row);
+
+	auto *platformCombo = new QComboBox(ui->multiServiceTargetsTable);
+	platformCombo->addItems(StreamTargetPlatforms());
+	int platformIndex = platformCombo->findText(entry.platform);
+	if (platformIndex >= 0)
+		platformCombo->setCurrentIndex(platformIndex);
+
+	auto *serverEdit = new QLineEdit(ui->multiServiceTargetsTable);
+	serverEdit->setText(entry.server);
+
+	auto *keyEdit = new QLineEdit(ui->multiServiceTargetsTable);
+	keyEdit->setText(entry.key);
+	keyEdit->setEchoMode(QLineEdit::Password);
+
+	ui->multiServiceTargetsTable->setCellWidget(row, 0, platformCombo);
+	ui->multiServiceTargetsTable->setCellWidget(row, 1, serverEdit);
+	ui->multiServiceTargetsTable->setCellWidget(row, 2, keyEdit);
+
+	connect(platformCombo, &QComboBox::currentIndexChanged, this, &AutoConfigStreamPage::UpdateCompleted);
+	connect(serverEdit, &QLineEdit::textChanged, this, &AutoConfigStreamPage::UpdateCompleted);
+	connect(keyEdit, &QLineEdit::textChanged, this, &AutoConfigStreamPage::UpdateCompleted);
+
+	UpdateTargetButtons();
+}
+
+std::vector<AutoConfigStreamPage::StreamTargetEntry> AutoConfigStreamPage::CollectStreamTargets() const
+{
+	std::vector<StreamTargetEntry> targets;
+	int rowCount = ui->multiServiceTargetsTable->rowCount();
+	for (int row = 0; row < rowCount; ++row) {
+		auto *platformCombo = qobject_cast<QComboBox *>(ui->multiServiceTargetsTable->cellWidget(row, 0));
+		auto *serverEdit = qobject_cast<QLineEdit *>(ui->multiServiceTargetsTable->cellWidget(row, 1));
+		auto *keyEdit = qobject_cast<QLineEdit *>(ui->multiServiceTargetsTable->cellWidget(row, 2));
+
+		if (!platformCombo || !serverEdit || !keyEdit)
+			continue;
+
+		const QString server = serverEdit->text().trimmed();
+		const QString key = keyEdit->text().trimmed();
+		if (server.isEmpty() || key.isEmpty())
+			continue;
+
+		targets.push_back({platformCombo->currentText(), server, key});
+	}
+
+	return targets;
+}
+
+void AutoConfigStreamPage::UpdateTargetButtons()
+{
+	bool hasSelection = ui->multiServiceTargetsTable->currentRow() >= 0;
+	ui->removeTargetButton->setEnabled(hasSelection);
+}
+
+void AutoConfigStreamPage::on_addTargetButton_clicked()
+{
+	AddStreamTargetRow({"Custom", "", ""});
+	UpdateCompleted();
+}
+
+void AutoConfigStreamPage::on_removeTargetButton_clicked()
+{
+	int row = ui->multiServiceTargetsTable->currentRow();
+	if (row < 0)
+		return;
+
+	ui->multiServiceTargetsTable->removeRow(row);
+	UpdateTargetButtons();
+	UpdateCompleted();
 }
 
 void AutoConfigStreamPage::on_show_clicked()

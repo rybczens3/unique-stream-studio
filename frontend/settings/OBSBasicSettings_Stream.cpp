@@ -11,6 +11,7 @@
 
 #include <qt-wrappers.hpp>
 
+#include <QHeaderView>
 #include <QUuid>
 
 static const QUuid &CustomServerUUID()
@@ -36,6 +37,11 @@ enum class Section : int {
 	Connect,
 	StreamKey,
 };
+
+static QStringList StreamTargetPlatforms()
+{
+	return {"YouTube", "Twitch", "Facebook", "Instagram", "Custom"};
+}
 
 bool OBSBasicSettings::IsCustomService() const
 {
@@ -90,6 +96,126 @@ void OBSBasicSettings::InitStreamPage()
 		&OBSBasicSettings::UpdateMultitrackVideo);
 	connect(ui->multitrackVideoConfigOverrideEnable, &QCheckBox::toggled, this,
 		&OBSBasicSettings::UpdateMultitrackVideo);
+
+	InitializeMultiServiceTargetsUI();
+}
+
+void OBSBasicSettings::InitializeMultiServiceTargetsUI()
+{
+	ui->multiServiceTargetsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+	ui->multiServiceTargetsTable->setSelectionMode(QAbstractItemView::SingleSelection);
+	ui->multiServiceTargetsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+	ui->multiServiceTargetsTable->verticalHeader()->setVisible(false);
+	ui->multiServiceTargetsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+	connect(ui->multiServiceTargetsTable->selectionModel(), &QItemSelectionModel::selectionChanged, this,
+		&OBSBasicSettings::UpdateTargetButtons);
+
+	UpdateTargetButtons();
+}
+
+void OBSBasicSettings::AddStreamTargetRow(const StreamTargetEntry &entry)
+{
+	int row = ui->multiServiceTargetsTable->rowCount();
+	ui->multiServiceTargetsTable->insertRow(row);
+
+	auto *platformCombo = new QComboBox(ui->multiServiceTargetsTable);
+	platformCombo->addItems(StreamTargetPlatforms());
+	int platformIndex = platformCombo->findText(entry.platform);
+	if (platformIndex >= 0)
+		platformCombo->setCurrentIndex(platformIndex);
+
+	auto *serverEdit = new QLineEdit(ui->multiServiceTargetsTable);
+	serverEdit->setText(entry.server);
+
+	auto *keyEdit = new QLineEdit(ui->multiServiceTargetsTable);
+	keyEdit->setText(entry.key);
+	keyEdit->setEchoMode(QLineEdit::Password);
+
+	ui->multiServiceTargetsTable->setCellWidget(row, 0, platformCombo);
+	ui->multiServiceTargetsTable->setCellWidget(row, 1, serverEdit);
+	ui->multiServiceTargetsTable->setCellWidget(row, 2, keyEdit);
+
+	connect(platformCombo, &QComboBox::currentIndexChanged, this, &OBSBasicSettings::Stream1Changed);
+	connect(serverEdit, &QLineEdit::textChanged, this, &OBSBasicSettings::Stream1Changed);
+	connect(keyEdit, &QLineEdit::textChanged, this, &OBSBasicSettings::Stream1Changed);
+
+	UpdateTargetButtons();
+}
+
+std::vector<OBSBasicSettings::StreamTargetEntry> OBSBasicSettings::CollectStreamTargets() const
+{
+	std::vector<StreamTargetEntry> targets;
+	int rowCount = ui->multiServiceTargetsTable->rowCount();
+	for (int row = 0; row < rowCount; ++row) {
+		auto *platformCombo = qobject_cast<QComboBox *>(ui->multiServiceTargetsTable->cellWidget(row, 0));
+		auto *serverEdit = qobject_cast<QLineEdit *>(ui->multiServiceTargetsTable->cellWidget(row, 1));
+		auto *keyEdit = qobject_cast<QLineEdit *>(ui->multiServiceTargetsTable->cellWidget(row, 2));
+
+		if (!platformCombo || !serverEdit || !keyEdit)
+			continue;
+
+		const QString server = serverEdit->text().trimmed();
+		const QString key = keyEdit->text().trimmed();
+		if (server.isEmpty() || key.isEmpty())
+			continue;
+
+		targets.push_back({platformCombo->currentText(), server, key});
+	}
+
+	return targets;
+}
+
+void OBSBasicSettings::LoadStreamTargetsFromServices()
+{
+	ui->multiServiceTargetsTable->setRowCount(0);
+	streamTargets.clear();
+
+	const auto &services = main->GetServices();
+	if (services.size() <= 1)
+		return;
+
+	for (size_t i = 1; i < services.size(); ++i) {
+		OBSDataAutoRelease settings = obs_service_get_settings(services[i]);
+		const char *platform = obs_data_get_string(settings, "platform");
+		if (!platform || !*platform) {
+			platform = obs_data_get_string(settings, "service");
+		}
+
+		const char *server = obs_data_get_string(settings, "server");
+		const char *key = obs_data_get_string(settings, "key");
+
+		StreamTargetEntry entry;
+		entry.platform = platform && *platform ? QT_UTF8(platform) : QStringLiteral("Custom");
+		entry.server = server ? QT_UTF8(server) : QString();
+		entry.key = key ? QT_UTF8(key) : QString();
+
+		streamTargets.push_back(entry);
+		AddStreamTargetRow(entry);
+	}
+}
+
+void OBSBasicSettings::UpdateTargetButtons()
+{
+	bool hasSelection = ui->multiServiceTargetsTable->currentRow() >= 0;
+	ui->removeTargetButton->setEnabled(hasSelection);
+}
+
+void OBSBasicSettings::on_addTargetButton_clicked()
+{
+	AddStreamTargetRow({"Custom", "", ""});
+	Stream1Changed();
+}
+
+void OBSBasicSettings::on_removeTargetButton_clicked()
+{
+	int row = ui->multiServiceTargetsTable->currentRow();
+	if (row < 0)
+		return;
+
+	ui->multiServiceTargetsTable->removeRow(row);
+	UpdateTargetButtons();
+	Stream1Changed();
 }
 
 void OBSBasicSettings::LoadStream1Settings()
@@ -218,6 +344,8 @@ void OBSBasicSettings::LoadStream1Settings()
 		ui->whipSimulcastGroupBox->hide();
 	}
 
+	LoadStreamTargetsFromServices();
+
 	ServiceChanged(true);
 
 	UpdateKeyLink();
@@ -320,7 +448,25 @@ void OBSBasicSettings::SaveStream1Settings()
 	if (!newService)
 		return;
 
-	main->SetService(newService);
+	std::vector<OBSService> services;
+	services.emplace_back(newService);
+
+	for (const auto &target : CollectStreamTargets()) {
+		OBSDataAutoRelease target_settings = obs_data_create();
+		obs_data_set_string(target_settings, "server", QT_TO_UTF8(target.server));
+		obs_data_set_string(target_settings, "key", QT_TO_UTF8(target.key));
+		obs_data_set_string(target_settings, "platform", QT_TO_UTF8(target.platform));
+
+		obs_service_t *target_service =
+			obs_service_create("rtmp_custom", "multi_target_service", target_settings, nullptr);
+		if (!target_service)
+			continue;
+
+		services.emplace_back(target_service);
+		obs_service_release(target_service);
+	}
+
+	main->SetServices(services);
 	main->SaveService();
 	main->auth = auth;
 	if (!!main->auth) {
@@ -1406,7 +1552,6 @@ static bool return_first_id(void *data, const char *id)
 bool OBSBasicSettings::ServiceAndVCodecCompatible()
 {
 	bool simple = (ui->outputMode->currentIndex() == 0);
-	bool ret;
 
 	const char *codec;
 
@@ -1419,31 +1564,53 @@ bool OBSBasicSettings::ServiceAndVCodecCompatible()
 		codec = obs_get_encoder_codec(QT_TO_UTF8(encoder));
 	}
 
-	OBSService service = SpawnTempService();
-	const char **codecs = obs_service_get_supported_video_codecs(service);
+	std::vector<OBSService> services;
+	services.emplace_back(SpawnTempService());
 
-	if (!codecs || IsCustomService()) {
-		const char *output;
-		char **output_codecs;
+	for (const auto &target : CollectStreamTargets()) {
+		OBSDataAutoRelease settings = obs_data_create();
+		obs_data_set_string(settings, "server", QT_TO_UTF8(target.server));
+		obs_data_set_string(settings, "key", QT_TO_UTF8(target.key));
+		obs_data_set_string(settings, "platform", QT_TO_UTF8(target.platform));
 
-		obs_enum_output_types_with_protocol(QT_TO_UTF8(protocol), &output, return_first_id);
+		obs_service_t *service = obs_service_create("rtmp_custom", "temp_multi_target", settings, nullptr);
+		if (!service)
+			continue;
 
-		output_codecs = strlist_split(obs_get_output_supported_video_codecs(output), ';', false);
-
-		ret = service_supports_codec((const char **)output_codecs, codec);
-
-		strlist_free(output_codecs);
-	} else {
-		ret = service_supports_codec(codecs, codec);
+		services.emplace_back(service);
+		obs_service_release(service);
 	}
 
-	return ret;
+	for (const auto &service : services) {
+		const char **codecs = obs_service_get_supported_video_codecs(service);
+		bool is_custom = strcmp(obs_service_get_id(service), "rtmp_custom") == 0;
+		bool ret = false;
+
+		if (!codecs || is_custom) {
+			const char *output;
+			char **output_codecs;
+
+			obs_enum_output_types_with_protocol(QT_TO_UTF8(protocol), &output, return_first_id);
+
+			output_codecs = strlist_split(obs_get_output_supported_video_codecs(output), ';', false);
+
+			ret = service_supports_codec((const char **)output_codecs, codec);
+
+			strlist_free(output_codecs);
+		} else {
+			ret = service_supports_codec(codecs, codec);
+		}
+
+		if (!ret)
+			return false;
+	}
+
+	return true;
 }
 
 bool OBSBasicSettings::ServiceAndACodecCompatible()
 {
 	bool simple = (ui->outputMode->currentIndex() == 0);
-	bool ret;
 
 	QString codec;
 
@@ -1454,24 +1621,47 @@ bool OBSBasicSettings::ServiceAndACodecCompatible()
 		codec = obs_get_encoder_codec(QT_TO_UTF8(encoder));
 	}
 
-	OBSService service = SpawnTempService();
-	const char **codecs = obs_service_get_supported_audio_codecs(service);
+	std::vector<OBSService> services;
+	services.emplace_back(SpawnTempService());
 
-	if (!codecs || IsCustomService()) {
-		const char *output;
-		char **output_codecs;
+	for (const auto &target : CollectStreamTargets()) {
+		OBSDataAutoRelease settings = obs_data_create();
+		obs_data_set_string(settings, "server", QT_TO_UTF8(target.server));
+		obs_data_set_string(settings, "key", QT_TO_UTF8(target.key));
+		obs_data_set_string(settings, "platform", QT_TO_UTF8(target.platform));
 
-		obs_enum_output_types_with_protocol(QT_TO_UTF8(protocol), &output, return_first_id);
-		output_codecs = strlist_split(obs_get_output_supported_audio_codecs(output), ';', false);
+		obs_service_t *service = obs_service_create("rtmp_custom", "temp_multi_target", settings, nullptr);
+		if (!service)
+			continue;
 
-		ret = service_supports_codec((const char **)output_codecs, QT_TO_UTF8(codec));
-
-		strlist_free(output_codecs);
-	} else {
-		ret = service_supports_codec(codecs, QT_TO_UTF8(codec));
+		services.emplace_back(service);
+		obs_service_release(service);
 	}
 
-	return ret;
+	for (const auto &service : services) {
+		const char **codecs = obs_service_get_supported_audio_codecs(service);
+		bool is_custom = strcmp(obs_service_get_id(service), "rtmp_custom") == 0;
+		bool ret = false;
+
+		if (!codecs || is_custom) {
+			const char *output;
+			char **output_codecs;
+
+			obs_enum_output_types_with_protocol(QT_TO_UTF8(protocol), &output, return_first_id);
+			output_codecs = strlist_split(obs_get_output_supported_audio_codecs(output), ';', false);
+
+			ret = service_supports_codec((const char **)output_codecs, QT_TO_UTF8(codec));
+
+			strlist_free(output_codecs);
+		} else {
+			ret = service_supports_codec(codecs, QT_TO_UTF8(codec));
+		}
+
+		if (!ret)
+			return false;
+	}
+
+	return true;
 }
 
 /* we really need a way to find fallbacks in a less hardcoded way. maybe. */

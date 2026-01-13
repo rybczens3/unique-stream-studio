@@ -319,7 +319,25 @@ void AutoConfig::SaveStreamSettings()
 	if (!newService)
 		return;
 
-	main->SetService(newService);
+	std::vector<OBSService> services;
+	services.emplace_back(newService);
+
+	for (const auto &target : streamTargets) {
+		OBSDataAutoRelease target_settings = obs_data_create();
+		obs_data_set_string(target_settings, "server", target.server.c_str());
+		obs_data_set_string(target_settings, "key", target.key.c_str());
+		obs_data_set_string(target_settings, "platform", target.platform.c_str());
+
+		obs_service_t *target_service =
+			obs_service_create("rtmp_custom", "multi_target_service", target_settings, nullptr);
+		if (!target_service)
+			continue;
+
+		services.emplace_back(target_service);
+		obs_service_release(target_service);
+	}
+
+	main->SetServices(services);
 	main->SaveService();
 	main->auth = streamPage->auth;
 	if (!!main->auth) {
