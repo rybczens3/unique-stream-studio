@@ -28,6 +28,8 @@ class PluginRecord:
     id: str
     name: str
     compatibility: str
+    owner: str
+    status: str
     versions: List[PluginVersion] = field(default_factory=list)
 
 
@@ -43,6 +45,8 @@ USERS: Dict[str, Dict[str, str]] = {}
 TOKENS: Dict[str, Dict[str, str]] = {}
 
 PLUGINS: Dict[str, PluginRecord] = {}
+
+PLUGIN_STATUSES: Set[str] = {"draft", "submitted", "approved", "rejected", "published", "unpublished"}
 
 
 def seed_users() -> None:
@@ -73,6 +77,8 @@ def seed_plugins(base_url: str) -> None:
         id="com.example.stream-overlay",
         name="Stream Overlay",
         compatibility="obs>=30.0.0",
+        owner="admin",
+        status="published",
         versions=versions,
     )
 
@@ -82,6 +88,8 @@ def seed_plugins(base_url: str) -> None:
         id="com.example.chat-enhancer",
         name="Chat Enhancer",
         compatibility="obs>=29.0.0",
+        owner="admin",
+        status="published",
         versions=[
             PluginVersion(
                 version="1.0.0",
