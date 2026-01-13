@@ -19,20 +19,29 @@
 
 #include "Rect.hpp"
 
-#include <string>
 #include <filesystem>
+#include <optional>
+#include <string>
 
 namespace OBS {
 
 enum class SceneCoordinateMode { Invalid, Absolute, Relative };
 
 class SceneCollection {
+public:
+	struct CatalogMetadata {
+		std::string packageId;
+		std::string packageVersion;
+		std::string source;
+	};
+
 private:
 	std::string name_;
 	std::filesystem::path filePath_;
 
 	SceneCoordinateMode coordinateMode_ = SceneCoordinateMode::Relative;
 	Rect migrationResolution_;
+	std::optional<CatalogMetadata> catalogMetadata_;
 
 public:
 	SceneCollection() = default;
@@ -60,5 +69,9 @@ public:
 	inline int getVersion() const { return (coordinateMode_ == SceneCoordinateMode::Relative) ? 2 : 1; };
 
 	bool empty() const { return name_.empty() || filePath_.empty(); }
+
+	const std::optional<CatalogMetadata> &getCatalogMetadata() const;
+	void setCatalogMetadata(const CatalogMetadata &metadata);
+	void clearCatalogMetadata();
 };
 } // namespace OBS

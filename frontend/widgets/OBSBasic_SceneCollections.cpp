@@ -47,6 +47,7 @@ static constexpr std::string_view SceneCollectionPath = "/obs-studio/basic/scene
 namespace DataKeys {
 static constexpr std::string_view AbsoluteCoordinates = "AbsoluteCoordinates";
 static constexpr std::string_view MigrationResolution = "migration_resolution";
+static constexpr std::string_view CatalogPackage = "catalog_package";
 } // namespace DataKeys
 
 namespace L10N {
@@ -972,6 +973,14 @@ void OBSBasic::Save(SceneCollection &collection)
 		obs_data_set_obj(saveData, DataKeys::MigrationResolution.data(), resolutionData);
 	}
 
+	if (auto metadata = collection.getCatalogMetadata()) {
+		OBSDataAutoRelease catalogData = obs_data_create();
+		obs_data_set_string(catalogData, "id", metadata->packageId.c_str());
+		obs_data_set_string(catalogData, "version", metadata->packageVersion.c_str());
+		obs_data_set_string(catalogData, "source", metadata->source.c_str());
+		obs_data_set_obj(saveData, DataKeys::CatalogPackage.data(), catalogData);
+	}
+
 	// Version
 	int sceneCollectionVersion = collection.getVersion();
 	obs_data_set_int(saveData, "version", sceneCollectionVersion);
@@ -1303,6 +1312,16 @@ void OBSBasic::LoadData(obs_data_t *data, SceneCollection &collection)
 			collection.setMigrationResolution(obs_data_get_int(migrationResolution, "x"),
 							  obs_data_get_int(migrationResolution, "y"));
 		}
+	}
+
+	OBSDataAutoRelease catalogData = obs_data_get_obj(data, DataKeys::CatalogPackage.data());
+	if (catalogData) {
+		SceneCollection::CatalogMetadata metadata;
+		metadata.packageId = obs_data_get_string(catalogData, "id");
+		metadata.packageVersion = obs_data_get_string(catalogData, "version");
+		metadata.source = obs_data_get_string(catalogData, "source");
+		if (!metadata.packageId.empty())
+			collection.setCatalogMetadata(metadata);
 	}
 
 	// FIXME: Migrate to actual SceneCollection container with reference-based API

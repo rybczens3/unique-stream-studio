@@ -34,6 +34,8 @@
 #include <obs.hpp>
 #include <qt-wrappers.hpp>
 
+#include <filesystem>
+
 #include <graphics/matrix4.h>
 #include <util/platform.h>
 #include <util/threading.h>
@@ -66,6 +68,7 @@ struct QuickTransition;
 
 namespace OBS {
 class SceneCollection;
+struct SceneCatalogPackage;
 struct Rect;
 enum class LogFileType;
 } // namespace OBS
@@ -446,6 +449,7 @@ public slots:
 	 */
 private:
 	QPointer<QDockWidget> statsDock;
+	QPointer<QDockWidget> sceneCatalogDock;
 	QByteArray startingDockLayout;
 	QStringList extraDockNames;
 	QList<std::shared_ptr<QDockWidget>> extraDocks;
@@ -1332,6 +1336,9 @@ public:
 	}
 
 	void CreateSceneUndoRedoAction(const QString &action_name, OBSData undo_data, OBSData redo_data);
+
+	bool ImportSceneCatalogPackage(const OBS::SceneCatalogPackage &package, const std::filesystem::path &packageRoot,
+				       std::string &errorMessage);
 
 	/* -------------------------------------
 	 * MARK: - OBSBasic_Screenshots
