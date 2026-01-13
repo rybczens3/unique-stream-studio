@@ -112,6 +112,8 @@ def login(payload: LoginRequest) -> TokenResponse:
     user = USERS.get(payload.username)
     if not user or user["password"] != payload.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Account is inactive")
     access_token = uuid.uuid4().hex
     refresh_token = uuid.uuid4().hex
     TOKENS[access_token] = {
@@ -490,19 +492,28 @@ def unpublish_plugin(plugin_id: str, authorization: Optional[str] = Header(None)
 def list_users(authorization: Optional[str] = Header(None)) -> List[UserInfo]:
     session = require_session(authorization)
     require_permission(session, "users:manage")
-    return [UserInfo(username=username, role=user["role"]) for username, user in USERS.items()]
+    require_role(session, {"admin"})
+    return [
+        UserInfo(username=username, role=user["role"], active=user.get("active", True))
+        for username, user in USERS.items()
+    ]
 
 
 @app.post(BASE_PATH + "/admin/users", response_model=UserInfo)
 def create_user(payload: UserCreateRequest, authorization: Optional[str] = Header(None)) -> UserInfo:
     session = require_session(authorization)
     require_permission(session, "users:manage")
+    require_role(session, {"admin"})
     if payload.role not in ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
     if payload.username in USERS:
         raise HTTPException(status_code=409, detail="User already exists")
-    USERS[payload.username] = {"password": payload.password, "role": payload.role}
-    return UserInfo(username=payload.username, role=payload.role)
+    USERS[payload.username] = {
+        "password": payload.password,
+        "role": payload.role,
+        "active": payload.active,
+    }
+    return UserInfo(username=payload.username, role=payload.role, active=payload.active)
 
 
 @app.patch(BASE_PATH + "/admin/users/{username}", response_model=UserInfo)
@@ -511,6 +522,7 @@ def update_user(
 ) -> UserInfo:
     session = require_session(authorization)
     require_permission(session, "users:manage")
+    require_role(session, {"admin"})
     user = USERS.get(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -520,13 +532,16 @@ def update_user(
         user["role"] = payload.role
     if payload.password:
         user["password"] = payload.password
-    return UserInfo(username=username, role=user["role"])
+    if payload.active is not None:
+        user["active"] = payload.active
+    return UserInfo(username=username, role=user["role"], active=user.get("active", True))
 
 
 @app.delete(BASE_PATH + "/admin/users/{username}", status_code=204)
 def delete_user(username: str, authorization: Optional[str] = Header(None)) -> None:
     session = require_session(authorization)
     require_permission(session, "users:manage")
+    require_role(session, {"admin"})
     if username not in USERS:
         raise HTTPException(status_code=404, detail="User not found")
     del USERS[username]

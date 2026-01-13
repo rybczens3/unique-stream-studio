@@ -546,6 +546,8 @@ async function renderUserManagement() {
                   <th>Użytkownik</th>
                   <th>Rola</th>
                   <th>Nowa rola</th>
+                  <th>Status</th>
+                  <th>Nowy status</th>
                   <th>Hasło</th>
                   <th>Akcje</th>
                 </tr>
@@ -562,6 +564,13 @@ async function renderUserManagement() {
                         <option value="user">user</option>
                         <option value="developer">developer</option>
                         <option value="admin">admin</option>
+                      </select>
+                    </td>
+                    <td>${user.active ? "Aktywne" : "Nieaktywne"}</td>
+                    <td>
+                      <select data-active="${user.username}">
+                        <option value="true">Aktywne</option>
+                        <option value="false">Nieaktywne</option>
                       </select>
                     </td>
                     <td><input type="password" data-pass="${user.username}" placeholder="Nowe hasło" /></td>
@@ -598,6 +607,13 @@ async function renderUserManagement() {
                 <option value="admin">admin</option>
               </select>
             </div>
+            <div>
+              <label for="newActive">Status konta</label>
+              <select id="newActive" name="active">
+                <option value="true" selected>Aktywne</option>
+                <option value="false">Nieaktywne</option>
+              </select>
+            </div>
             <button class="button" type="submit">Dodaj</button>
           </form>
         </div>
@@ -607,12 +623,17 @@ async function renderUserManagement() {
     view.querySelectorAll("select[data-role]").forEach((select) => {
       select.value = users.find((user) => user.username === select.dataset.role)?.role ?? "user";
     });
+    view.querySelectorAll("select[data-active]").forEach((select) => {
+      const user = users.find((entry) => entry.username === select.dataset.active);
+      select.value = user?.active ? "true" : "false";
+    });
 
     view.querySelectorAll("button[data-update]").forEach((button) => {
       button.addEventListener("click", async () => {
         const username = button.dataset.update;
         const role = view.querySelector(`select[data-role="${username}"]`).value;
         const password = view.querySelector(`input[data-pass="${username}"]`).value;
+        const active = view.querySelector(`select[data-active="${username}"]`).value === "true";
         const payload = {};
         if (role) {
           payload.role = role;
@@ -620,6 +641,7 @@ async function renderUserManagement() {
         if (password) {
           payload.password = password;
         }
+        payload.active = active;
         try {
           await apiFetch(`/admin/users/${username}`, {
             method: "PATCH",

@@ -52,9 +52,9 @@ PLUGIN_STATUSES: Set[str] = {"draft", "submitted", "approved", "rejected", "publ
 def seed_users() -> None:
     USERS.update(
         {
-            "admin": {"password": "admin123", "role": "admin"},
-            "developer": {"password": "dev123", "role": "developer"},
-            "user": {"password": "user123", "role": "user"},
+            "admin": {"password": "admin123", "role": "admin", "active": True},
+            "developer": {"password": "dev123", "role": "developer", "active": True},
+            "user": {"password": "user123", "role": "user", "active": True},
         }
     )
 
