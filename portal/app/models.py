@@ -2,13 +2,37 @@ from pydantic import BaseModel, Field
 
 
 class PluginMetadata(BaseModel):
-    id: str = Field(..., description="Unique plugin identifier")
-    name: str
+    id: str = Field(
+        ...,
+        description="Unique plugin identifier",
+        min_length=3,
+        max_length=64,
+        pattern=r"^[a-z0-9]+([.-][a-z0-9]+)*$",
+    )
+    name: str = Field(..., min_length=3, max_length=120)
     version: str
-    compatibility: str
+    compatibility: str = Field(..., min_length=3, max_length=120)
     package_url: str
     sha256: str
     signature: str
+
+
+class PluginRecordInfo(BaseModel):
+    id: str = Field(
+        ...,
+        description="Unique plugin identifier",
+        min_length=3,
+        max_length=64,
+        pattern=r"^[a-z0-9]+([.-][a-z0-9]+)*$",
+    )
+    name: str = Field(..., min_length=3, max_length=120)
+    compatibility: str = Field(..., min_length=3, max_length=120)
+    owner: str
+    status: str
+    version: str | None = None
+    package_url: str | None = None
+    sha256: str | None = None
+    signature: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -46,14 +70,14 @@ class UserUpdateRequest(BaseModel):
 
 
 class PluginCreateRequest(BaseModel):
-    id: str
-    name: str
-    compatibility: str
+    id: str = Field(..., min_length=3, max_length=64, pattern=r"^[a-z0-9]+([.-][a-z0-9]+)*$")
+    name: str = Field(..., min_length=3, max_length=120)
+    compatibility: str = Field(..., min_length=3, max_length=120)
 
 
 class PluginUpdateRequest(BaseModel):
-    name: str
-    compatibility: str
+    name: str = Field(..., min_length=3, max_length=120)
+    compatibility: str = Field(..., min_length=3, max_length=120)
 
 
 class PluginVersionRequest(BaseModel):

@@ -11,6 +11,7 @@ from .models import (
     LoginRequest,
     PluginCreateRequest,
     PluginMetadata,
+    PluginRecordInfo,
     PluginUpdateRequest,
     PluginVersionRequest,
     TokenResponse,
@@ -64,6 +65,48 @@ def require_permission(session: dict, permission: str) -> None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
+def require_role(session: dict, roles: set[str]) -> None:
+    if session.get("role") not in roles:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def require_owner_or_admin(session: dict, plugin: PluginRecord) -> None:
+    if session.get("role") == "admin":
+        return
+    if session.get("username") != plugin.owner:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def latest_version_metadata(plugin: PluginRecord) -> Optional[PluginMetadata]:
+    if not plugin.versions:
+        return None
+    latest = plugin.versions[-1]
+    return PluginMetadata(
+        id=plugin.id,
+        name=plugin.name,
+        version=latest.version,
+        compatibility=plugin.compatibility,
+        package_url=latest.package_url,
+        sha256=latest.sha256,
+        signature=latest.signature,
+    )
+
+
+def plugin_record_info(plugin: PluginRecord) -> PluginRecordInfo:
+    latest = plugin.versions[-1] if plugin.versions else None
+    return PluginRecordInfo(
+        id=plugin.id,
+        name=plugin.name,
+        compatibility=plugin.compatibility,
+        owner=plugin.owner,
+        status=plugin.status,
+        version=latest.version if latest else None,
+        package_url=latest.package_url if latest else None,
+        sha256=latest.sha256 if latest else None,
+        signature=latest.signature if latest else None,
+    )
+
+
 @app.post(BASE_PATH + "/auth/login", response_model=TokenResponse)
 def login(payload: LoginRequest) -> TokenResponse:
     user = USERS.get(payload.username)
@@ -94,20 +137,13 @@ def account_me(authorization: Optional[str] = Header(None)) -> AccountInfo:
 def list_plugins_admin(authorization: Optional[str] = Header(None)) -> List[PluginMetadata]:
     session = require_session(authorization)
     require_permission(session, "plugins:read")
+    require_role(session, {"admin"})
     results: List[PluginMetadata] = []
     for plugin in PLUGINS.values():
-        latest = plugin.versions[-1]
-        results.append(
-            PluginMetadata(
-                id=plugin.id,
-                name=plugin.name,
-                version=latest.version,
-                compatibility=plugin.compatibility,
-                package_url=latest.package_url,
-                sha256=latest.sha256,
-                signature=latest.signature,
-            )
-        )
+        latest = latest_version_metadata(plugin)
+        if not latest:
+            continue
+        results.append(latest)
     return results
 
 
@@ -117,44 +153,32 @@ def list_plugins(
 ) -> List[PluginMetadata]:
     results: List[PluginMetadata] = []
     for plugin in PLUGINS.values():
+        if plugin.status != "published":
+            continue
         if query and query.lower() not in plugin.name.lower() and query.lower() not in plugin.id.lower():
             continue
-        latest = plugin.versions[-1]
-        results.append(
-            PluginMetadata(
-                id=plugin.id,
-                name=plugin.name,
-                version=latest.version,
-                compatibility=plugin.compatibility,
-                package_url=latest.package_url,
-                sha256=latest.sha256,
-                signature=latest.signature,
-            )
-        )
+        latest = latest_version_metadata(plugin)
+        if not latest:
+            continue
+        results.append(latest)
     return results
 
 
 @app.get(BASE_PATH + "/plugins/{plugin_id}", response_model=PluginMetadata)
 def plugin_detail(plugin_id: str) -> PluginMetadata:
     plugin = PLUGINS.get(plugin_id)
-    if not plugin:
+    if not plugin or plugin.status != "published":
         raise HTTPException(status_code=404, detail="Plugin not found")
-    latest = plugin.versions[-1]
-    return PluginMetadata(
-        id=plugin.id,
-        name=plugin.name,
-        version=latest.version,
-        compatibility=plugin.compatibility,
-        package_url=latest.package_url,
-        sha256=latest.sha256,
-        signature=latest.signature,
-    )
+    latest = latest_version_metadata(plugin)
+    if not latest:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    return latest
 
 
 @app.get(BASE_PATH + "/plugins/{plugin_id}/versions", response_model=List[PluginMetadata])
 def plugin_versions(plugin_id: str) -> List[PluginMetadata]:
     plugin = PLUGINS.get(plugin_id)
-    if not plugin:
+    if not plugin or plugin.status != "published":
         raise HTTPException(status_code=404, detail="Plugin not found")
     return [
         PluginMetadata(
@@ -173,7 +197,7 @@ def plugin_versions(plugin_id: str) -> List[PluginMetadata]:
 @app.get(BASE_PATH + "/plugins/{plugin_id}/package")
 def download_package(plugin_id: str, version: str = Query(...)) -> Response:
     plugin = PLUGINS.get(plugin_id)
-    if not plugin:
+    if not plugin or plugin.status != "published":
         raise HTTPException(status_code=404, detail="Plugin not found")
     version_entry = next((v for v in plugin.versions if v.version == version), None)
     if not version_entry:
@@ -189,13 +213,21 @@ def create_plugin(
 ) -> PluginMetadata:
     session = require_session(authorization)
     require_permission(session, "plugins:write")
+    require_role(session, {"admin"})
 
     if payload.id in PLUGINS:
         raise HTTPException(status_code=409, detail="Plugin already exists")
 
     PLUGINS[payload.id] = plugin = PLUGINS.setdefault(
         payload.id,
-        PluginRecord(id=payload.id, name=payload.name, compatibility=payload.compatibility, versions=[]),
+        PluginRecord(
+            id=payload.id,
+            name=payload.name,
+            compatibility=payload.compatibility,
+            owner=session["username"],
+            status="published",
+            versions=[],
+        ),
     )
 
     data = package_bytes(payload.id, "1.0.0")
@@ -227,6 +259,7 @@ def add_plugin_version(
 ) -> PluginMetadata:
     session = require_session(authorization)
     require_permission(session, "plugins:write")
+    require_role(session, {"admin"})
 
     plugin = PLUGINS.get(plugin_id)
     if not plugin:
@@ -260,6 +293,7 @@ def update_plugin(
 ) -> PluginMetadata:
     session = require_session(authorization)
     require_permission(session, "plugins:write")
+    require_role(session, {"admin"})
 
     plugin = PLUGINS.get(plugin_id)
     if not plugin:
@@ -283,10 +317,173 @@ def update_plugin(
 def delete_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> None:
     session = require_session(authorization)
     require_permission(session, "plugins:write")
+    require_role(session, {"admin"})
 
     if plugin_id not in PLUGINS:
         raise HTTPException(status_code=404, detail="Plugin not found")
     del PLUGINS[plugin_id]
+
+
+@app.post(BASE_PATH + "/plugins", response_model=PluginRecordInfo)
+def create_plugin_self(
+    payload: PluginCreateRequest,
+    authorization: Optional[str] = Header(None),
+) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+
+    if payload.id in PLUGINS:
+        raise HTTPException(status_code=409, detail="Plugin already exists")
+
+    data = package_bytes(payload.id, "0.1.0")
+    sha256 = compute_sha256(data)
+    version = PluginVersion(
+        version="0.1.0",
+        package_url=f"http://localhost:8080{BASE_PATH}/plugins/{payload.id}/package?version=0.1.0",
+        sha256=sha256,
+        signature=signature_for(sha256),
+    )
+
+    PLUGINS[payload.id] = plugin = PluginRecord(
+        id=payload.id,
+        name=payload.name,
+        compatibility=payload.compatibility,
+        owner=session["username"],
+        status="draft",
+        versions=[version],
+    )
+
+    return plugin_record_info(plugin)
+
+
+@app.get(BASE_PATH + "/plugins/mine", response_model=List[PluginRecordInfo])
+def list_my_plugins(authorization: Optional[str] = Header(None)) -> List[PluginRecordInfo]:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+
+    results: List[PluginRecordInfo] = []
+    for plugin in PLUGINS.values():
+        if session["role"] != "admin" and plugin.owner != session["username"]:
+            continue
+        results.append(plugin_record_info(plugin))
+    return results
+
+
+@app.get(BASE_PATH + "/plugins/{plugin_id}/manage", response_model=PluginRecordInfo)
+def get_plugin_manage(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    require_owner_or_admin(session, plugin)
+    return plugin_record_info(plugin)
+
+
+@app.put(BASE_PATH + "/plugins/{plugin_id}", response_model=PluginRecordInfo)
+def update_plugin_self(
+    plugin_id: str,
+    payload: PluginUpdateRequest,
+    authorization: Optional[str] = Header(None),
+) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    require_owner_or_admin(session, plugin)
+
+    plugin.name = payload.name
+    plugin.compatibility = payload.compatibility
+    return plugin_record_info(plugin)
+
+
+@app.delete(BASE_PATH + "/plugins/{plugin_id}", status_code=204)
+def delete_plugin_self(plugin_id: str, authorization: Optional[str] = Header(None)) -> None:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    require_owner_or_admin(session, plugin)
+    del PLUGINS[plugin_id]
+
+
+@app.post(BASE_PATH + "/plugins/{plugin_id}/submit", response_model=PluginRecordInfo)
+def submit_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_permission(session, "plugins:write")
+    require_role(session, {"developer", "admin"})
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    require_owner_or_admin(session, plugin)
+    if plugin.status not in {"draft", "rejected", "unpublished"}:
+        raise HTTPException(status_code=400, detail="Plugin cannot be submitted")
+    plugin.status = "submitted"
+    return plugin_record_info(plugin)
+
+
+@app.post(BASE_PATH + "/plugins/{plugin_id}/approve", response_model=PluginRecordInfo)
+def approve_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_role(session, {"admin"})
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    if plugin.status != "submitted":
+        raise HTTPException(status_code=400, detail="Plugin cannot be approved")
+    plugin.status = "approved"
+    return plugin_record_info(plugin)
+
+
+@app.post(BASE_PATH + "/plugins/{plugin_id}/reject", response_model=PluginRecordInfo)
+def reject_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_role(session, {"admin"})
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    if plugin.status != "submitted":
+        raise HTTPException(status_code=400, detail="Plugin cannot be rejected")
+    plugin.status = "rejected"
+    return plugin_record_info(plugin)
+
+
+@app.post(BASE_PATH + "/plugins/{plugin_id}/publish", response_model=PluginRecordInfo)
+def publish_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_role(session, {"admin"})
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    if plugin.status != "approved":
+        raise HTTPException(status_code=400, detail="Plugin cannot be published")
+    if not plugin.versions:
+        raise HTTPException(status_code=400, detail="Plugin has no versions to publish")
+    plugin.status = "published"
+    return plugin_record_info(plugin)
+
+
+@app.post(BASE_PATH + "/plugins/{plugin_id}/unpublish", response_model=PluginRecordInfo)
+def unpublish_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> PluginRecordInfo:
+    session = require_session(authorization)
+    require_role(session, {"admin"})
+
+    plugin = PLUGINS.get(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    if plugin.status != "published":
+        raise HTTPException(status_code=400, detail="Plugin cannot be unpublished")
+    plugin.status = "unpublished"
+    return plugin_record_info(plugin)
 
 
 @app.get(BASE_PATH + "/admin/users", response_model=List[UserInfo])
